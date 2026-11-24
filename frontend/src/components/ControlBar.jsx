@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Download, RefreshCw, Zap, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import { Play, Download, RefreshCw, Zap, SlidersHorizontal } from 'lucide-react';
 
 export default function ControlBar({
   scenarios,
@@ -22,20 +22,13 @@ export default function ControlBar({
   return (
     <header className="border-b border-[#262626] bg-[#171717] px-6 py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        {/* Supabase Breadcrumbs */}
+        {/* Branding */}
         <div className="flex items-center gap-2 text-xs">
           <div className="flex items-center gap-1.5 font-medium text-zinc-400">
             <span className="flex h-6 w-6 items-center justify-center rounded bg-[#1e2e26] border border-[#2b4c3b] text-[#3ecf8e]">
               <Zap className="h-3.5 w-3.5 fill-current" />
             </span>
-            <span className="text-zinc-200 font-semibold tracking-wide">GridFlux</span>
-          </div>
-          <ChevronRight className="w-3.5 h-3.5 text-zinc-600" />
-          <span className="text-zinc-400 font-mono">26B16CS311 / CO4-Hybrid</span>
-          <ChevronRight className="w-3.5 h-3.5 text-zinc-600" />
-          <div className="flex items-center gap-1.5 bg-[#14231b] border border-[#244b36] px-2 py-0.5 rounded text-[11px] font-mono text-[#3ecf8e]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#3ecf8e] animate-pulse"></span>
-            <span>Mamdani + DE/best/1</span>
+            <span className="text-zinc-200 font-semibold tracking-wide text-sm">GridFlux</span>
           </div>
         </div>
 

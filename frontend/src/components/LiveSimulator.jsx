@@ -281,21 +281,7 @@ export default function LiveSimulator({
         </div>
 
         {/* Row 2: Playback Controls & Timeline Scrubber */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${isPlaying ? 'bg-[#3ecf8e] animate-pulse' : 'bg-amber-400'}`}></span>
-              <span className="text-sm font-semibold text-zinc-100 font-mono tracking-wide">
-                {activeModeName}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5 bg-[#202020] border border-[#333] px-3 py-1 rounded-md text-xs font-mono text-zinc-200">
-              <Clock className="w-3.5 h-3.5 text-[#3ecf8e]" />
-              <span>Simulated Time: <b className="text-zinc-100">{hourLabel}</b> / 24:00</span>
-            </div>
-          </div>
-
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex items-center gap-2 text-xs font-mono">
             {/* Play / Pause */}
             <button
@@ -344,18 +330,6 @@ export default function LiveSimulator({
               <span>Show Full Day</span>
             </button>
 
-            {/* Reset to 00:00 */}
-            <button
-              onClick={() => {
-                setIsPlaying(false);
-                onHourChange(0);
-              }}
-              className="flex items-center gap-1 bg-[#222] hover:bg-[#282828] border border-[#333] text-zinc-400 hover:text-zinc-200 px-3 py-2 rounded-md transition-colors cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset</span>
-            </button>
-
             {/* Speed Selector */}
             <div className="flex items-center bg-[#222] border border-[#333] rounded-md overflow-hidden">
               {[1, 2, 4].map((spd) => (
@@ -376,9 +350,9 @@ export default function LiveSimulator({
         {/* Timeline Drag Scrubber Slider */}
         <div className="space-y-1.5 pt-1">
           <div className="flex justify-between text-[11px] font-mono text-zinc-400">
-            <span>00:00 (Start)</span>
-            <span className="text-[#3ecf8e] font-bold">Drag slider to scrub timeline: {hourLabel}</span>
-            <span>24:00 (End)</span>
+            <span>00:00</span>
+            <span className="text-[#3ecf8e] font-bold">{hourLabel}</span>
+            <span>24:00</span>
           </div>
           <input
             type="range"
