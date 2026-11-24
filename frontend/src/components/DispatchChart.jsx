@@ -1,9 +1,14 @@
 import React, { useState, useRef } from 'react';
+import { Layers, GitCompare } from 'lucide-react';
 
 // Monotone-clamped cubic spline interpolation
 function getSmoothSplinePath(points) {
   if (!points || points.length === 0) return '';
-  if (points.length === 1) return `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+  if (points.length === 1) {
+    const x = points[0][0];
+    const y = points[0][1];
+    return `M ${x.toFixed(1)} ${y.toFixed(1)} L ${(x + 0.5).toFixed(1)} ${y.toFixed(1)}`;
+  }
 
   const n = points.length;
   const dxs = [];
@@ -48,14 +53,18 @@ function getSmoothSplinePath(points) {
 
 export default function DispatchChart({
   timeLabels,
-  solarKw,
-  loadKw,
-  batteryKw,
-  gridImportKw,
-  batterySoc,
+  fdeResult,
+  pdeResult,
+  rbResult,
+  solarKw: propSolar,
+  loadKw: propLoad,
+  batteryKw: propBat,
+  gridImportKw: propGrid,
+  batterySoc: propSoc,
   selectedHourIndex,
   onHoverHour
 }) {
+  const [chartMode, setChartMode] = useState('fde'); // 'fde' | 'pde' | 'rb' | 'compare'
   const [activeSeries, setActiveSeries] = useState({
     solar: true,
     load: true,
@@ -65,11 +74,25 @@ export default function DispatchChart({
   });
 
   const svgRef = useRef(null);
-  const currentHover = selectedHourIndex !== null && selectedHourIndex >= 0 && selectedHourIndex < timeLabels.length
+  const currentHover = selectedHourIndex !== null && selectedHourIndex >= 0 && selectedHourIndex < (timeLabels ? timeLabels.length : 24)
     ? selectedHourIndex
     : 0;
 
   if (!timeLabels || timeLabels.length === 0) return null;
+
+  // Resolve dataset according to selected algorithm
+  let currentDataset = fdeResult;
+  if (chartMode === 'pde' && pdeResult) {
+    currentDataset = pdeResult;
+  } else if (chartMode === 'rb' && rbResult) {
+    currentDataset = rbResult;
+  }
+
+  const solarArr = currentDataset ? currentDataset.solar_kw : propSolar || [];
+  const loadArr = currentDataset ? currentDataset.load_kw : propLoad || [];
+  const batteryArr = currentDataset ? currentDataset.battery_kw : propBat || [];
+  const gridArr = currentDataset ? currentDataset.grid_import_kw : propGrid || [];
+  const socArr = currentDataset ? currentDataset.battery_soc : propSoc || [];
 
   const N = timeLabels.length;
   const width = 880;
@@ -77,22 +100,27 @@ export default function DispatchChart({
   const padding = { top: 30, right: 30, bottom: 45, left: 75 };
 
   const minPower = -120;
-  const maxPower = 320;
+  const maxPower = 340;
 
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  const scaleX = (idx) => padding.left + (idx / (N - 1)) * chartW;
+  const scaleX = (idx) => padding.left + (idx / Math.max(1, N - 1)) * chartW;
   const scaleY = (val) => padding.top + chartH - ((val - minPower) / (maxPower - minPower)) * chartH;
   const scaleSoc = (socVal) => padding.top + chartH - socVal * chartH;
 
   const yZero = scaleY(0);
 
-  const solarPoints = solarKw.map((val, idx) => [scaleX(idx), scaleY(val)]);
-  const loadPoints = loadKw.map((val, idx) => [scaleX(idx), scaleY(val)]);
-  const batteryPoints = batteryKw.map((val, idx) => [scaleX(idx), scaleY(val)]);
-  const gridPoints = gridImportKw.map((val, idx) => [scaleX(idx), scaleY(val)]);
-  const socPoints = batterySoc.map((val, idx) => [scaleX(idx), scaleSoc(val)]);
+  const solarPoints = solarArr.map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const loadPoints = loadArr.map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const batteryPoints = batteryArr.map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const gridPoints = gridArr.map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const socPoints = socArr.map((val, idx) => [scaleX(idx), scaleSoc(val)]);
+
+  // Comparative grid import points across all 3 baselines
+  const fdeGridPoints = fdeResult ? fdeResult.grid_import_kw.map((val, idx) => [scaleX(idx), scaleY(val)]) : [];
+  const pdeGridPoints = pdeResult ? pdeResult.grid_import_kw.map((val, idx) => [scaleX(idx), scaleY(val)]) : [];
+  const rbGridPoints = rbResult ? rbResult.grid_import_kw.map((val, idx) => [scaleX(idx), scaleY(val)]) : [];
 
   const hoverX = scaleX(currentHover);
 
@@ -110,9 +138,19 @@ export default function DispatchChart({
     }
   };
 
+  const currentSolar = solarArr[currentHover] ?? 0;
+  const currentLoad = loadArr[currentHover] ?? 0;
+  const currentBat = batteryArr[currentHover] ?? 0;
+  const currentGrid = gridArr[currentHover] ?? 0;
+  const currentSoc = socArr[currentHover] ?? 0.5;
+
+  const fdeHoverGrid = fdeResult ? fdeResult.grid_import_kw[currentHover] ?? 0 : 0;
+  const pdeHoverGrid = pdeResult ? pdeResult.grid_import_kw[currentHover] ?? 0 : 0;
+  const rbHoverGrid = rbResult ? rbResult.grid_import_kw[currentHover] ?? 0 : 0;
+
   return (
     <div className="flex flex-col bg-[#171717] border border-[#262626] rounded-lg shadow-sm">
-      {/* Header and Series Toggles */}
+      {/* Header, Mode Tabs & Series Toggles */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-[#262626] bg-[#1a1a1a]">
         <div>
           <div className="flex items-center gap-2">
@@ -124,108 +162,193 @@ export default function DispatchChart({
             </span>
           </div>
           <p className="text-xs text-zinc-300 mt-0.5">
-            Hover or drag across the chart to inspect time-step physics and triggered fuzzy rules
+            Hover across the chart to inspect time-step physics, battery buffering, and grid import
           </p>
         </div>
 
-        {/* Legend / Toggles */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
+        {/* Algorithm Mode Switcher */}
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
           <button
-            onClick={() => setActiveSeries((s) => ({ ...s, solar: !s.solar }))}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all border ${
-              activeSeries.solar
-                ? 'bg-[#221e14] border-amber-500/50 text-amber-400 font-medium'
-                : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
+            onClick={() => setChartMode('fde')}
+            className={`px-2.5 py-1 rounded transition-all border cursor-pointer ${
+              chartMode === 'fde'
+                ? 'bg-[#14231b] text-[#3ecf8e] border-[#244b36] font-semibold'
+                : 'bg-[#1e1e1e] border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-            <span>Solar PV</span>
+            Fuzzy + DE (Proposed)
           </button>
 
-          <button
-            onClick={() => setActiveSeries((s) => ({ ...s, load: !s.load }))}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all border ${
-              activeSeries.load
-                ? 'bg-[#202020] border-zinc-500/50 text-zinc-200 font-medium'
-                : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-zinc-400"></span>
-            <span>Load</span>
-          </button>
+          {pdeResult && (
+            <button
+              onClick={() => setChartMode('pde')}
+              className={`px-2.5 py-1 rounded transition-all border cursor-pointer ${
+                chartMode === 'pde'
+                  ? 'bg-[#1a1c2e] text-indigo-400 border-indigo-500/40 font-semibold'
+                  : 'bg-[#1e1e1e] border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Plain DE
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveSeries((s) => ({ ...s, battery: !s.battery }))}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all border ${
-              activeSeries.battery
-                ? 'bg-[#132228] border-cyan-500/50 text-cyan-400 font-medium'
-                : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-            <span>Battery (kW)</span>
-          </button>
+          {rbResult && (
+            <button
+              onClick={() => setChartMode('rb')}
+              className={`px-2.5 py-1 rounded transition-all border cursor-pointer ${
+                chartMode === 'rb'
+                  ? 'bg-[#251829] text-purple-400 border-purple-500/40 font-semibold'
+                  : 'bg-[#1e1e1e] border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Normal Greedy
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveSeries((s) => ({ ...s, grid: !s.grid }))}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all border ${
-              activeSeries.grid
-                ? 'bg-[#261c16] border-orange-500/50 text-orange-400 font-medium'
-                : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-orange-400"></span>
-            <span>Grid Import</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSeries((s) => ({ ...s, soc: !s.soc }))}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all border ${
-              activeSeries.soc
-                ? 'bg-[#13241b] border-emerald-500/50 text-[#3ecf8e] font-medium'
-                : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-[#3ecf8e]"></span>
-            <span>SoC %</span>
-          </button>
+          {rbResult && (
+            <button
+              onClick={() => setChartMode('compare')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all border cursor-pointer ${
+                chartMode === 'compare'
+                  ? 'bg-[#242416] text-amber-300 border-amber-500/50 font-semibold'
+                  : 'bg-[#1e1e1e] border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <GitCompare className="w-3 h-3" />
+              <span>Multi-Overlay</span>
+            </button>
+          )}
         </div>
+
+        {/* Series Toggles */}
+        {chartMode !== 'compare' && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
+            <button
+              onClick={() => setActiveSeries((s) => ({ ...s, solar: !s.solar }))}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+                activeSeries.solar
+                  ? 'bg-[#221e14] border-amber-500/50 text-amber-400 font-medium'
+                  : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span>Solar PV</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSeries((s) => ({ ...s, load: !s.load }))}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+                activeSeries.load
+                  ? 'bg-[#202020] border-zinc-500/50 text-zinc-200 font-medium'
+                  : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-zinc-400"></span>
+              <span>Load</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSeries((s) => ({ ...s, battery: !s.battery }))}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+                activeSeries.battery
+                  ? 'bg-[#132228] border-cyan-500/50 text-cyan-400 font-medium'
+                  : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+              <span>Battery</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSeries((s) => ({ ...s, grid: !s.grid }))}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+                activeSeries.grid
+                  ? 'bg-[#261c16] border-orange-500/50 text-orange-400 font-medium'
+                  : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+              <span>Grid</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSeries((s) => ({ ...s, soc: !s.soc }))}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+                activeSeries.soc
+                  ? 'bg-[#13241b] border-emerald-500/50 text-[#3ecf8e] font-medium'
+                  : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#3ecf8e]"></span>
+              <span>SoC %</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Pinned Telemetry Readout Strip (Stable fixed height, never pushes layout!) */}
+      {/* Pinned Telemetry Readout Strip */}
       <div className="px-5 py-2.5 bg-[#141414] border-b border-[#262626] flex flex-wrap items-center justify-between text-xs font-mono">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-[#3ecf8e]"></span>
-          <span className="text-zinc-400">CURRENT TIME:</span>
+          <span className="text-zinc-400">HOUR:</span>
           <span className="text-zinc-100 font-bold bg-[#222] px-2 py-0.5 rounded border border-[#333]">
             {timeLabels[currentHover]}
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 text-xs">
-          <div className="flex items-center gap-1">
-            <span className="text-amber-400">Solar:</span>
-            <span className="text-zinc-100 font-semibold tabular-nums">{solarKw[currentHover].toFixed(1)} kW</span>
+        {chartMode === 'compare' ? (
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#3ecf8e]"></span>
+              <span className="text-[#3ecf8e] font-semibold">Fuzzy+DE:</span>
+              <span className="text-zinc-100 font-bold tabular-nums">{fdeHoverGrid.toFixed(1)} kW</span>
+            </div>
+            {pdeResult && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                <span className="text-indigo-400 font-semibold">Plain DE:</span>
+                <span className="text-zinc-200 font-bold tabular-nums">{pdeHoverGrid.toFixed(1)} kW</span>
+              </div>
+            )}
+            {rbResult && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                <span className="text-red-400 font-semibold">Normal Greedy:</span>
+                <span className="text-zinc-200 font-bold tabular-nums">{rbHoverGrid.toFixed(1)} kW</span>
+              </div>
+            )}
+            {rbResult && (
+              <div className="flex items-center gap-1 text-[#3ecf8e] font-bold">
+                <span>Shaved: {(rbHoverGrid - fdeHoverGrid).toFixed(1)} kW</span>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-zinc-400">Load:</span>
-            <span className="text-zinc-200 font-semibold tabular-nums">{loadKw[currentHover].toFixed(1)} kW</span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="flex items-center gap-1">
+              <span className="text-amber-400">Solar:</span>
+              <span className="text-zinc-100 font-semibold tabular-nums">{currentSolar.toFixed(1)} kW</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-zinc-400">Load:</span>
+              <span className="text-zinc-200 font-semibold tabular-nums">{currentLoad.toFixed(1)} kW</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-cyan-400">Battery:</span>
+              <span className="text-zinc-100 font-semibold tabular-nums">
+                {currentBat > 0 ? '+' : ''}{currentBat.toFixed(1)} kW
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-orange-400">Grid Import:</span>
+              <span className="text-zinc-100 font-bold tabular-nums">{currentGrid.toFixed(1)} kW</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[#3ecf8e]">SoC:</span>
+              <span className="text-zinc-100 font-bold tabular-nums">{(currentSoc * 100).toFixed(0)}%</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-cyan-400">Battery:</span>
-            <span className="text-zinc-100 font-semibold tabular-nums">
-              {batteryKw[currentHover] > 0 ? '+' : ''}{batteryKw[currentHover].toFixed(1)} kW
-            </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-orange-400">Grid Import:</span>
-            <span className="text-zinc-100 font-bold tabular-nums">{gridImportKw[currentHover].toFixed(1)} kW</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[#3ecf8e]">SoC:</span>
-            <span className="text-zinc-100 font-bold tabular-nums">{(batterySoc[currentHover] * 100).toFixed(0)}%</span>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Main SVG Chart with rock-solid hover tracking */}
@@ -239,6 +362,10 @@ export default function DispatchChart({
             <linearGradient id="solarGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.22" />
               <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+            </linearGradient>
+            <linearGradient id="gridGradFde" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3ecf8e" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#3ecf8e" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -292,100 +419,157 @@ export default function DispatchChart({
             );
           })}
 
-          {/* Trace 1: Solar PV (Spline & Area) */}
-          {activeSeries.solar && (
+          {/* MULTI-ALGORITHM COMPARISON OVERLAY */}
+          {chartMode === 'compare' ? (
             <g pointerEvents="none">
-              <path
-                d={`${getSmoothSplinePath(solarPoints)} L ${scaleX(N - 1)} ${yZero} L ${scaleX(0)} ${yZero} Z`}
-                fill="url(#solarGrad)"
-              />
+              {/* Solar PV reference */}
               <path
                 d={getSmoothSplinePath(solarPoints)}
                 fill="none"
                 stroke="#f59e0b"
-                strokeWidth="2.4"
-                strokeLinecap="round"
+                strokeWidth="1.8"
+                opacity="0.35"
               />
+              {/* Demand Load reference */}
+              <path
+                d={getSmoothSplinePath(loadPoints)}
+                fill="none"
+                stroke="#a1a1aa"
+                strokeWidth="1.8"
+                strokeDasharray="4 3"
+                opacity="0.35"
+              />
+              {/* Normal Greedy Grid Import (Red dashed spike!) */}
+              {rbGridPoints.length > 0 && (
+                <path
+                  d={getSmoothSplinePath(rbGridPoints)}
+                  fill="none"
+                  stroke="#f43f5e"
+                  strokeWidth="2.8"
+                  strokeDasharray="6 3"
+                  strokeLinecap="round"
+                />
+              )}
+              {/* Plain DE Grid Import (Indigo dashed) */}
+              {pdeGridPoints.length > 0 && (
+                <path
+                  d={getSmoothSplinePath(pdeGridPoints)}
+                  fill="none"
+                  stroke="#818cf8"
+                  strokeWidth="2.2"
+                  strokeDasharray="4 2"
+                  strokeLinecap="round"
+                />
+              )}
+              {/* Proposed Fuzzy + DE Grid Import (Solid Mint Green #3ecf8e!) */}
+              {fdeGridPoints.length > 0 && (
+                <>
+                  <path
+                    d={`${getSmoothSplinePath(fdeGridPoints)} L ${scaleX(N - 1)} ${yZero} L ${scaleX(0)} ${yZero} Z`}
+                    fill="url(#gridGradFde)"
+                  />
+                  <path
+                    d={getSmoothSplinePath(fdeGridPoints)}
+                    fill="none"
+                    stroke="#3ecf8e"
+                    strokeWidth="3.0"
+                    strokeLinecap="round"
+                  />
+                </>
+              )}
+            </g>
+          ) : (
+            /* SINGLE ALGORITHM MODE */
+            <g pointerEvents="none">
+              {/* Trace 1: Solar PV */}
+              {activeSeries.solar && solarPoints.length > 0 && (
+                <g>
+                  <path
+                    d={`${getSmoothSplinePath(solarPoints)} L ${scaleX(N - 1)} ${yZero} L ${scaleX(0)} ${yZero} Z`}
+                    fill="url(#solarGrad)"
+                  />
+                  <path
+                    d={getSmoothSplinePath(solarPoints)}
+                    fill="none"
+                    stroke="#f59e0b"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                  />
+                </g>
+              )}
+
+              {/* Trace 2: Demand Load */}
+              {activeSeries.load && loadPoints.length > 0 && (
+                <path
+                  d={getSmoothSplinePath(loadPoints)}
+                  fill="none"
+                  stroke="#a1a1aa"
+                  strokeWidth="2.2"
+                  strokeDasharray="4 3"
+                  strokeLinecap="round"
+                />
+              )}
+
+              {/* Trace 3: Battery Power */}
+              {activeSeries.battery && batteryPoints.length > 0 && (
+                <path
+                  d={getSmoothSplinePath(batteryPoints)}
+                  fill="none"
+                  stroke="#06b6d4"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                />
+              )}
+
+              {/* Trace 4: Grid Import */}
+              {activeSeries.grid && gridPoints.length > 0 && (
+                <path
+                  d={getSmoothSplinePath(gridPoints)}
+                  fill="none"
+                  stroke={chartMode === 'rb' ? '#c084fc' : chartMode === 'pde' ? '#818cf8' : '#f97316'}
+                  strokeWidth="2.8"
+                  strokeLinecap="round"
+                />
+              )}
+
+              {/* Trace 5: Battery SoC */}
+              {activeSeries.soc && socPoints.length > 0 && (
+                <path
+                  d={getSmoothSplinePath(socPoints)}
+                  fill="none"
+                  stroke="#3ecf8e"
+                  strokeWidth="2.2"
+                  strokeDasharray="3 3"
+                  strokeLinecap="round"
+                />
+              )}
             </g>
           )}
 
-          {/* Trace 2: Demand Load (Dashed line) */}
-          {activeSeries.load && (
-            <path
-              pointerEvents="none"
-              d={getSmoothSplinePath(loadPoints)}
-              fill="none"
-              stroke="#a1a1aa"
-              strokeWidth="2.2"
-              strokeDasharray="4 3"
-              strokeLinecap="round"
-            />
-          )}
+          {/* Interactive Hover Vertical Guide Line */}
+          <line
+            pointerEvents="none"
+            x1={hoverX}
+            y1={padding.top}
+            x2={hoverX}
+            y2={height - padding.bottom}
+            stroke="#3ecf8e"
+            strokeWidth="1.5"
+            strokeDasharray="3 3"
+          />
 
-          {/* Trace 3: Battery Power */}
-          {activeSeries.battery && (
-            <path
-              pointerEvents="none"
-              d={getSmoothSplinePath(batteryPoints)}
-              fill="none"
-              stroke="#06b6d4"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-            />
-          )}
+          {/* Marker dot at hovered grid import */}
+          <circle
+            pointerEvents="none"
+            cx={hoverX}
+            cy={scaleY(chartMode === 'compare' ? fdeHoverGrid : currentGrid)}
+            r="4.5"
+            fill="#3ecf8e"
+            stroke="#fff"
+            strokeWidth="2"
+          />
 
-          {/* Trace 4: Grid Import */}
-          {activeSeries.grid && (
-            <path
-              pointerEvents="none"
-              d={getSmoothSplinePath(gridPoints)}
-              fill="none"
-              stroke="#f97316"
-              strokeWidth="2.8"
-              strokeLinecap="round"
-            />
-          )}
-
-          {/* Trace 5: Battery SoC */}
-          {activeSeries.soc && (
-            <path
-              pointerEvents="none"
-              d={getSmoothSplinePath(socPoints)}
-              fill="none"
-              stroke="#3ecf8e"
-              strokeWidth="2.2"
-              strokeDasharray="3 3"
-              strokeLinecap="round"
-            />
-          )}
-
-          {/* Vertical Hairline Cursor */}
-          <g pointerEvents="none">
-            <line
-              x1={hoverX}
-              y1={padding.top}
-              x2={hoverX}
-              y2={height - padding.bottom}
-              stroke="#3ecf8e"
-              strokeWidth="1.5"
-              strokeDasharray="3 3"
-            />
-            {/* Smooth intersection markers */}
-            {activeSeries.solar && (
-              <circle cx={hoverX} cy={scaleY(solarKw[currentHover])} r="3.5" fill="#f59e0b" stroke="#171717" strokeWidth="1" />
-            )}
-            {activeSeries.load && (
-              <circle cx={hoverX} cy={scaleY(loadKw[currentHover])} r="3.5" fill="#a1a1aa" stroke="#171717" strokeWidth="1" />
-            )}
-            {activeSeries.battery && (
-              <circle cx={hoverX} cy={scaleY(batteryKw[currentHover])} r="3.5" fill="#06b6d4" stroke="#171717" strokeWidth="1" />
-            )}
-            {activeSeries.grid && (
-              <circle cx={hoverX} cy={scaleY(gridImportKw[currentHover])} r="4.5" fill="#f97316" stroke="#171717" strokeWidth="1.5" />
-            )}
-          </g>
-
-          {/* Invisible interactive overlay capturing mousemove without bubbling */}
+          {/* Invisible Overlay Rect capturing pointer events */}
           <rect
             x={padding.left}
             y={padding.top}
@@ -393,7 +577,7 @@ export default function DispatchChart({
             height={chartH}
             fill="transparent"
             className="cursor-crosshair"
-            onMouseMove={handlePointerMove}
+            onPointerMove={handlePointerMove}
           />
         </svg>
       </div>

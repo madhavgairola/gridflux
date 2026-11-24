@@ -29,7 +29,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [optimizationData, setOptimizationData] = useState(null);
-  const [simulatedHourIdx, setSimulatedHourIdx] = useState(0);
+  const [simulatedHourIdx, setSimulatedHourIdx] = useState(23);
 
   useEffect(() => {
     fetch('/api/scenarios')
@@ -74,7 +74,9 @@ export default function App() {
 
       const data = await response.json();
       setOptimizationData(data);
-      setSimulatedHourIdx(0);
+      if (data && data.scenario && data.scenario.time_labels) {
+        setSimulatedHourIdx(data.scenario.time_labels.length - 1);
+      }
     } catch (err) {
       console.error(err);
       setError(err.message || 'Could not connect to optimization backend');
@@ -196,10 +198,13 @@ export default function App() {
             {/* KPI Strip */}
             <KpiStrip fdeResult={fde} pdeResult={pde} rbResult={rb} />
 
-            {/* Full 24-Hour Completed Dispatch Chart */}
+            {/* Full 24-Hour Completed Dispatch Chart with Multi-Baseline Mode */}
             {fde && (
               <DispatchChart
                 timeLabels={timeLabels}
+                fdeResult={fde}
+                pdeResult={pde}
+                rbResult={rb}
                 solarKw={fde.solar_kw}
                 loadKw={fde.load_kw}
                 batteryKw={fde.battery_kw}

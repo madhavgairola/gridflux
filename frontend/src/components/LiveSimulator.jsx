@@ -4,7 +4,12 @@ import { Play, Pause, RotateCcw, Sun, Battery, Zap, Building2, CheckCircle2, Awa
 // Safe Monotone-clamped cubic spline for progressive curves
 function getMonotonePath(points) {
   if (!points || points.length === 0) return '';
-  if (points.length === 1) return `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+  if (points.length === 1) {
+    // Single point: emit tiny horizontal segment so SVG renders visible line/cap
+    const x = points[0][0];
+    const y = points[0][1];
+    return `M ${x.toFixed(1)} ${y.toFixed(1)} L ${(x + 0.5).toFixed(1)} ${y.toFixed(1)}`;
+  }
   if (points.length === 2) return `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)} L ${points[1][0].toFixed(1)} ${points[1][1].toFixed(1)}`;
 
   const n = points.length;
@@ -181,6 +186,28 @@ export default function LiveSimulator({
     ? rbResult.grid_import_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)])
     : [];
 
+  // Full 24-Hour Silhouette/Ghost Curves (always visible faintly so chart is never empty!)
+  const ghostSolarPoints = activeDataset.solar_kw.map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const ghostLoadPoints = activeDataset.load_kw.map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const ghostBatteryPoints = activeDataset.battery_kw.map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const ghostGridPoints = activeDataset.grid_import_kw.map((val, idx) => [scaleX(idx), scaleY(val)]);
+
+  const ghostFdeGridPoints = fdeResult.grid_import_kw.map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const ghostPdeGridPoints = pdeResult && pdeResult.grid_import_kw
+    ? pdeResult.grid_import_kw.map((val, idx) => [scaleX(idx), scaleY(val)])
+    : [];
+  const ghostRbGridPoints = rbResult && rbResult.grid_import_kw
+    ? rbResult.grid_import_kw.map((val, idx) => [scaleX(idx), scaleY(val)])
+    : [];
+
+  const handleSelectMode = (mode) => {
+    setSimMode(mode);
+    // If paused at 00:00, reveal the day so the user instantly sees this mode's curve
+    if (t === 0 && !isPlaying) {
+      onHourChange(N - 1);
+    }
+  };
+
   const currentX = scaleX(t);
 
   return (
@@ -198,7 +225,7 @@ export default function LiveSimulator({
 
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
             <button
-              onClick={() => setSimMode('fde')}
+              onClick={() => handleSelectMode('fde')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
                 simMode === 'fde'
                   ? 'bg-[#14231b] text-[#3ecf8e] border-[#244b36] font-bold shadow-sm'
@@ -211,7 +238,7 @@ export default function LiveSimulator({
 
             {pdeResult && (
               <button
-                onClick={() => setSimMode('pde')}
+                onClick={() => handleSelectMode('pde')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
                   simMode === 'pde'
                     ? 'bg-[#1a1c2e] text-indigo-400 border-indigo-500/40 font-bold shadow-sm'
@@ -225,7 +252,7 @@ export default function LiveSimulator({
 
             {rbResult && (
               <button
-                onClick={() => setSimMode('rb')}
+                onClick={() => handleSelectMode('rb')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
                   simMode === 'rb'
                     ? 'bg-[#251829] text-purple-400 border-purple-500/40 font-bold shadow-sm'
@@ -239,7 +266,7 @@ export default function LiveSimulator({
 
             {rbResult && (
               <button
-                onClick={() => setSimMode('dual')}
+                onClick={() => handleSelectMode('dual')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
                   simMode === 'dual'
                     ? 'bg-[#242416] text-amber-300 border-amber-500/50 font-bold shadow-sm'
@@ -635,7 +662,39 @@ export default function LiveSimulator({
             {/* DUAL COMPARISON MODE RENDERING */}
             {simMode === 'dual' ? (
               <g pointerEvents="none">
-                {/* Solar PV (Subtle reference) */}
+                {/* 24-Hour Ghost Reference Silhouettes */}
+                {ghostRbGridPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(ghostRbGridPoints)}
+                    fill="none"
+                    stroke="#f43f5e"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 4"
+                    opacity="0.22"
+                  />
+                )}
+                {ghostPdeGridPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(ghostPdeGridPoints)}
+                    fill="none"
+                    stroke="#818cf8"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 4"
+                    opacity="0.22"
+                  />
+                )}
+                {ghostFdeGridPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(ghostFdeGridPoints)}
+                    fill="none"
+                    stroke="#3ecf8e"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 4"
+                    opacity="0.25"
+                  />
+                )}
+
+                {/* Solar PV Reference */}
                 <path
                   d={getMonotonePath(solarPoints)}
                   fill="none"
@@ -644,7 +703,7 @@ export default function LiveSimulator({
                   opacity="0.4"
                 />
 
-                {/* Microgrid Load (Subtle reference) */}
+                {/* Microgrid Load Reference */}
                 <path
                   d={getMonotonePath(loadPoints)}
                   fill="none"
@@ -679,21 +738,67 @@ export default function LiveSimulator({
                 )}
 
                 {/* Proposed Fuzzy + DE Grid Import (Solid Mint Green #3ecf8e!) */}
-                <path
-                  d={`${getMonotonePath(fdeGridPoints)} L ${currentX} ${yZero} L ${scaleX(0)} ${yZero} Z`}
-                  fill="url(#fdeGridGrad)"
-                />
-                <path
-                  d={getMonotonePath(fdeGridPoints)}
-                  fill="none"
-                  stroke="#3ecf8e"
-                  strokeWidth="3.0"
-                  strokeLinecap="round"
-                />
+                {fdeGridPoints.length > 0 && (
+                  <>
+                    <path
+                      d={`${getMonotonePath(fdeGridPoints)} L ${currentX} ${yZero} L ${scaleX(0)} ${yZero} Z`}
+                      fill="url(#fdeGridGrad)"
+                    />
+                    <path
+                      d={getMonotonePath(fdeGridPoints)}
+                      fill="none"
+                      stroke="#3ecf8e"
+                      strokeWidth="3.0"
+                      strokeLinecap="round"
+                    />
+                  </>
+                )}
               </g>
             ) : (
               /* SINGLE ALGORITHM MODE RENDERING (fde / pde / rb) */
               <g pointerEvents="none">
+                {/* 24-Hour Ghost Reference Silhouettes */}
+                {activeSeries.solar && ghostSolarPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(ghostSolarPoints)}
+                    fill="none"
+                    stroke="#f59e0b"
+                    strokeWidth="1.4"
+                    strokeDasharray="3 3"
+                    opacity="0.2"
+                  />
+                )}
+                {activeSeries.load && ghostLoadPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(ghostLoadPoints)}
+                    fill="none"
+                    stroke="#a1a1aa"
+                    strokeWidth="1.4"
+                    strokeDasharray="3 3"
+                    opacity="0.2"
+                  />
+                )}
+                {activeSeries.battery && ghostBatteryPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(ghostBatteryPoints)}
+                    fill="none"
+                    stroke="#06b6d4"
+                    strokeWidth="1.4"
+                    strokeDasharray="3 3"
+                    opacity="0.2"
+                  />
+                )}
+                {activeSeries.grid && ghostGridPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(ghostGridPoints)}
+                    fill="none"
+                    stroke={simMode === 'rb' ? '#c084fc' : simMode === 'pde' ? '#818cf8' : '#f97316'}
+                    strokeWidth="1.4"
+                    strokeDasharray="3 3"
+                    opacity="0.2"
+                  />
+                )}
+
                 {/* Trace 1: Solar */}
                 {activeSeries.solar && solarPoints.length > 0 && (
                   <g>
