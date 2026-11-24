@@ -219,7 +219,14 @@ class DifferentialEvolutionOptimizer:
         best_vec = pop[best_idx].copy()
         best_cost = fitness[best_idx]
 
-        convergence_curve = [float(best_cost)]
+        p_grid_init, _, _, th_init, _ = self._simulate_candidate_physics(best_vec, scenario)
+        init_peak = float(np.max(np.maximum(0.0, p_grid_init)))
+        init_cost = float(np.sum(np.maximum(0.0, p_grid_init) * scenario.tariff_usd * dt) + th_init * bat.deg_cost_per_kwh)
+
+        peak_grid_curve = [round(init_peak, 2)]
+        cost_curve = [round(init_cost, 2)]
+        fitness_curve = [round(float(best_cost), 2)]
+        best_peak_so_far = init_peak
 
         for gen in range(self.max_iter):
             for i in range(self.pop_size):
@@ -247,7 +254,14 @@ class DifferentialEvolutionOptimizer:
                         best_cost = trial_fitness
                         best_vec = u.copy()
 
-            convergence_curve.append(float(best_cost))
+            p_g_cur, _, _, th_cur, _ = self._simulate_candidate_physics(best_vec, scenario)
+            cur_peak = float(np.max(np.maximum(0.0, p_g_cur)))
+            cur_cost = float(np.sum(np.maximum(0.0, p_g_cur) * scenario.tariff_usd * dt) + th_cur * bat.deg_cost_per_kwh)
+            best_peak_so_far = min(best_peak_so_far, cur_peak)
+
+            peak_grid_curve.append(round(best_peak_so_far, 2))
+            cost_curve.append(round(cur_cost, 2))
+            fitness_curve.append(round(float(best_cost), 2))
 
         p_grid, soc, _, throughput, p_bat_opt = self._simulate_candidate_physics(best_vec, scenario)
 
@@ -277,7 +291,7 @@ class DifferentialEvolutionOptimizer:
             peak_grid_import_kw=round(peak_grid, 2),
             renewable_utilization_pct=round(renewable_util, 1),
             battery_cycle_cost_usd=round(deg_cost, 2),
-            convergence_curve=[round(c, 2) for c in convergence_curve],
+            convergence_curve=peak_grid_curve,
             metadata={
                 "population_size": self.pop_size,
                 "generations": self.max_iter,
@@ -287,6 +301,9 @@ class DifferentialEvolutionOptimizer:
                 "actual_export_credit_usd": round(export_credit, 2),
                 "total_throughput_kwh": round(throughput, 1),
                 "fuzzy_active": use_fuzzy_guidance,
+                "peak_convergence": peak_grid_curve,
+                "cost_convergence": cost_curve,
+                "fitness_convergence": fitness_curve,
                 "fuzzy_step_details": fuzzy_step_details[:10] if use_fuzzy_guidance else []
             }
         )

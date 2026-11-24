@@ -68,28 +68,72 @@ export default function ControlBar({
             <span className="text-zinc-700">/</span>
             <div className="flex items-center gap-1">
               <span className="text-zinc-500 text-[10px]">POP</span>
-              <input
-                type="number"
-                min="10"
-                max="80"
-                value={popSize}
-                onChange={(e) => onChangePopSize(Number(e.target.value))}
-                disabled={loading}
-                className="w-8 bg-transparent text-zinc-100 text-xs outline-none text-center"
-              />
+              <div className="flex items-center">
+                <input
+                  type="number"
+                  min="10"
+                  max="80"
+                  value={popSize}
+                  onChange={(e) => onChangePopSize(Math.max(10, Math.min(80, Number(e.target.value) || 10)))}
+                  disabled={loading}
+                  className="w-7 bg-transparent text-zinc-100 text-xs outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono"
+                />
+                <div className="flex flex-col text-zinc-500 ml-0.5 select-none">
+                  <button
+                    type="button"
+                    onClick={() => onChangePopSize(Math.min(80, popSize + 5))}
+                    disabled={loading || popSize >= 80}
+                    className="hover:text-zinc-200 cursor-pointer text-[8px] leading-[6px] hover:bg-[#282828] rounded px-0.5"
+                    title="Increase population size"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChangePopSize(Math.max(10, popSize - 5))}
+                    disabled={loading || popSize <= 10}
+                    className="hover:text-zinc-200 cursor-pointer text-[8px] leading-[6px] hover:bg-[#282828] rounded px-0.5 mt-0.5"
+                    title="Decrease population size"
+                  >
+                    ▼
+                  </button>
+                </div>
+              </div>
             </div>
             <span className="text-zinc-700">/</span>
             <div className="flex items-center gap-1">
               <span className="text-zinc-500 text-[10px]">GEN</span>
-              <input
-                type="number"
-                min="10"
-                max="100"
-                value={generations}
-                onChange={(e) => onChangeGenerations(Number(e.target.value))}
-                disabled={loading}
-                className="w-8 bg-transparent text-zinc-100 text-xs outline-none text-center"
-              />
+              <div className="flex items-center">
+                <input
+                  type="number"
+                  min="10"
+                  max="100"
+                  value={generations}
+                  onChange={(e) => onChangeGenerations(Math.max(10, Math.min(100, Number(e.target.value) || 10)))}
+                  disabled={loading}
+                  className="w-7 bg-transparent text-zinc-100 text-xs outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono"
+                />
+                <div className="flex flex-col text-zinc-500 ml-0.5 select-none">
+                  <button
+                    type="button"
+                    onClick={() => onChangeGenerations(Math.min(100, generations + 5))}
+                    disabled={loading || generations >= 100}
+                    className="hover:text-zinc-200 cursor-pointer text-[8px] leading-[6px] hover:bg-[#282828] rounded px-0.5"
+                    title="Increase generations"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChangeGenerations(Math.max(10, generations - 5))}
+                    disabled={loading || generations <= 10}
+                    className="hover:text-zinc-200 cursor-pointer text-[8px] leading-[6px] hover:bg-[#282828] rounded px-0.5 mt-0.5"
+                    title="Decrease generations"
+                  >
+                    ▼
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { TrendingDown, Zap, DollarSign } from 'lucide-react';
 
 // Monotone-preserving path to avoid wavy overshoot on convergence curves
 function getMonotonePath(points) {
@@ -51,9 +52,23 @@ function getMonotonePath(points) {
   return d;
 }
 
-export default function ConvergenceChart({ fdeCurve, pdeCurve }) {
-  const safeFde = Array.isArray(fdeCurve) ? fdeCurve.filter((v) => typeof v === 'number' && !isNaN(v)) : [];
-  const safePde = Array.isArray(pdeCurve) ? pdeCurve.filter((v) => typeof v === 'number' && !isNaN(v)) : [];
+export default function ConvergenceChart({ fdeResult, pdeResult, fdeCurve, pdeCurve }) {
+  const [metricMode, setMetricMode] = useState('peak'); // 'peak' (default kW) | 'cost' ($)
+
+  // Resolve active series based on selected metric
+  let activeFde = fdeCurve;
+  let activePde = pdeCurve;
+
+  if (metricMode === 'peak') {
+    activeFde = fdeResult?.metadata?.peak_convergence || fdeCurve;
+    activePde = pdeResult?.metadata?.peak_convergence || pdeCurve;
+  } else if (metricMode === 'cost') {
+    activeFde = fdeResult?.metadata?.cost_convergence || fdeCurve;
+    activePde = pdeResult?.metadata?.cost_convergence || pdeCurve;
+  }
+
+  const safeFde = Array.isArray(activeFde) ? activeFde.filter((v) => typeof v === 'number' && !isNaN(v)) : [];
+  const safePde = Array.isArray(activePde) ? activePde.filter((v) => typeof v === 'number' && !isNaN(v)) : [];
 
   if (safeFde.length === 0) {
     return (
@@ -67,7 +82,7 @@ export default function ConvergenceChart({ fdeCurve, pdeCurve }) {
 
   const width = 880;
   const height = 240;
-  const padding = { top: 25, right: 65, bottom: 40, left: 75 };
+  const padding = { top: 25, right: 80, bottom: 40, left: 75 };
 
   const N = Math.max(safeFde.length, safePde.length);
   const allVals = [...safeFde, ...safePde];
@@ -86,32 +101,73 @@ export default function ConvergenceChart({ fdeCurve, pdeCurve }) {
   const lastFde = safeFde[safeFde.length - 1];
   const lastPde = safePde.length > 0 ? safePde[safePde.length - 1] : null;
 
+  const delta = (typeof lastFde === 'number' && typeof lastPde === 'number') ? (lastPde - lastFde) : null;
+  const isPeak = metricMode === 'peak';
+  const unitLabel = isPeak ? 'kW' : '$';
+
   // Generation ticks
   const genTicks = [0, Math.floor(N / 4), Math.floor(N / 2), Math.floor((3 * N) / 4), N - 1];
 
   return (
     <div className="flex flex-col bg-[#171717] border border-[#262626] rounded-lg shadow-sm">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-[#262626] bg-[#1a1a1a]">
+      {/* Header with Metric Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-[#262626] bg-[#1a1a1a]">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
-            Differential Evolution Convergence Profile
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
+              {isPeak
+                ? 'Differential Evolution Peak Grid Draw Convergence'
+                : 'Differential Evolution Realized Energy Cost Convergence'}
+            </h3>
+            {delta !== null && delta > 0 && isPeak && (
+              <span className="flex items-center gap-1 text-[11px] font-mono font-bold bg-[#14231b] text-[#3ecf8e] border border-[#244b36] px-2 py-0.5 rounded">
+                <TrendingDown className="w-3 h-3" />
+                <span>-{delta.toFixed(1)} kW Shaved ({((delta / lastPde) * 100).toFixed(1)}%)</span>
+              </span>
+            )}
+          </div>
           <p className="text-xs text-zinc-300 mt-0.5">
-            Objective fitness cost ($) across optimization generations
+            {isPeak
+              ? 'Peak utility grid draw (kW) across optimization generations — lower peak import is superior'
+              : 'Realized daily operating cost ($) across optimization generations'}
           </p>
         </div>
 
-        <div className="flex items-center gap-4 text-xs font-mono">
-          <div className="flex items-center gap-1.5 text-[#3ecf8e]">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#3ecf8e]"></span>
-            <span className="font-medium">Fuzzy + DE (Proposed)</span>
+        {/* Metric Mode Switcher */}
+        <div className="flex items-center gap-1 font-mono text-xs">
+          <div className="flex items-center bg-[#202020] border border-[#333] rounded-md p-0.5 mr-2">
+            <button
+              onClick={() => setMetricMode('peak')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                isPeak ? 'bg-[#14231b] text-[#3ecf8e] font-bold border border-[#244b36]' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Zap className="w-3 h-3" />
+              <span>Peak Grid (kW)</span>
+            </button>
+            <button
+              onClick={() => setMetricMode('cost')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                !isPeak ? 'bg-[#202020] text-amber-300 font-bold border border-amber-500/40' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <DollarSign className="w-3 h-3" />
+              <span>Cost ($)</span>
+            </button>
           </div>
-          {safePde.length > 0 && (
-            <div className="flex items-center gap-1.5 text-indigo-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
-              <span className="font-medium">Plain DE (Baseline)</span>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[#3ecf8e]">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#3ecf8e]"></span>
+              <span className="font-medium">Fuzzy + DE (Proposed)</span>
             </div>
-          )}
+            {safePde.length > 0 && (
+              <div className="flex items-center gap-1.5 text-indigo-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
+                <span className="font-medium">Plain DE (Baseline)</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -141,7 +197,7 @@ export default function ConvergenceChart({ fdeCurve, pdeCurve }) {
                   fontFamily="monospace"
                   fontWeight="600"
                 >
-                  ${Math.round(val)}
+                  {isPeak ? `${Math.round(val)} kW` : `$${Math.round(val)}`}
                 </text>
               </g>
             );
@@ -207,7 +263,7 @@ export default function ConvergenceChart({ fdeCurve, pdeCurve }) {
                 fontFamily="monospace"
                 fontWeight="bold"
               >
-                ${lastFde.toFixed(1)}
+                {isPeak ? `${lastFde.toFixed(1)} kW` : `$${lastFde.toFixed(1)}`}
               </text>
             </>
           )}
@@ -230,7 +286,7 @@ export default function ConvergenceChart({ fdeCurve, pdeCurve }) {
                 fontFamily="monospace"
                 fontWeight="bold"
               >
-                ${lastPde.toFixed(1)}
+                {isPeak ? `${lastPde.toFixed(1)} kW` : `$${lastPde.toFixed(1)}`}
               </text>
             </>
           )}

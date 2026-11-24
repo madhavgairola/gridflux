@@ -235,6 +235,8 @@ export default function App() {
             <div className="lg:col-span-7 flex flex-col space-y-4">
               {fde && (
                 <ConvergenceChart
+                  fdeResult={fde}
+                  pdeResult={pde}
                   fdeCurve={fde.convergence_curve}
                   pdeCurve={pde ? pde.convergence_curve : null}
                 />
