@@ -5,7 +5,7 @@ import DispatchChart from './components/DispatchChart';
 import ConvergenceChart from './components/ConvergenceChart';
 import FuzzyInspector from './components/FuzzyInspector';
 import BenchmarkTable from './components/BenchmarkTable';
-import { AlertCircle, Sliders, Layers, BarChart2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 export default function App() {
   const [scenarios, setScenarios] = useState([
@@ -26,9 +26,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [optimizationData, setOptimizationData] = useState(null);
-  const [hoveredHourIdx, setHoveredHourIdx] = useState(12); // Default to midday
+  const [hoveredHourIdx, setHoveredHourIdx] = useState(12);
 
-  // Fetch scenarios on load
   useEffect(() => {
     fetch('/api/scenarios')
       .then((res) => res.json())
@@ -41,7 +40,6 @@ export default function App() {
         console.warn('API not reachable yet; using fallback presets catalog', err);
       });
 
-    // Run initial optimization
     runOptimization();
   }, []);
 
@@ -59,7 +57,7 @@ export default function App() {
           population_size: popSize,
           generations: generations,
           seed: seed,
-          mutation_factor: 0.7,
+          mutation_factor: 0.65,
           crossover_rate: 0.85,
           strategy: 'best1bin',
           include_baselines: includeBaselines
@@ -91,7 +89,7 @@ export default function App() {
   const timeLabels = optimizationData ? optimizationData.scenario.time_labels : [];
 
   return (
-    <div className="min-h-screen bg-[#070b12] text-slate-200 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#121212] text-zinc-200 flex flex-col font-sans select-none">
       {/* Top Header / Control Bar */}
       <ControlBar
         scenarios={scenarios}
@@ -116,7 +114,7 @@ export default function App() {
 
       {/* Error Alert */}
       {error && (
-        <div className="bg-red-950/70 border-b border-red-800 px-6 py-2.5 text-xs text-red-300 flex items-center gap-2">
+        <div className="bg-[#2a1414] border-b border-red-900/60 px-6 py-2.5 text-xs text-red-300 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
           <span>Backend Error: {error}. Ensure FastAPI is running on port 8000.</span>
         </div>
@@ -126,7 +124,7 @@ export default function App() {
       <KpiStrip fdeResult={fde} pdeResult={pde} rbResult={rb} />
 
       {/* Main Analytical Content Workspace */}
-      <main className="flex-1 p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-grid-mesh">
+      <main className="flex-1 p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-supabase-grid">
         {/* Left Column (8 cols): Primary Visualizations */}
         <div className="lg:col-span-8 flex flex-col">
           {fde ? (
@@ -152,9 +150,9 @@ export default function App() {
               />
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-[#0c1322] border border-slate-800 rounded min-h-[400px]">
-              <div className="text-center font-mono text-slate-400 text-xs">
-                {loading ? 'Initializing soft-computing simulation...' : 'No optimization data available.'}
+            <div className="flex-1 flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[400px]">
+              <div className="text-center font-mono text-zinc-500 text-xs">
+                {loading ? 'Executing Differential Evolution optimization...' : 'No optimization data available.'}
               </div>
             </div>
           )}
@@ -176,8 +174,8 @@ export default function App() {
               />
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-[#0c1322] border border-slate-800 rounded min-h-[300px]">
-              <div className="text-center font-mono text-slate-400 text-xs">
+            <div className="flex-1 flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[300px]">
+              <div className="text-center font-mono text-zinc-500 text-xs">
                 Waiting for optimization results...
               </div>
             </div>
@@ -185,16 +183,16 @@ export default function App() {
         </div>
       </main>
 
-      {/* Technical Lab Footer */}
-      <footer className="border-t border-slate-800/80 bg-[#090e18] px-6 py-2.5 text-[11px] font-mono text-slate-400 flex flex-wrap items-center justify-between gap-4">
+      {/* Supabase-style Footer */}
+      <footer className="border-t border-[#262626] bg-[#141414] px-6 py-2.5 text-[11px] font-mono text-zinc-500 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span>GridFlux v1.0.0</span>
+          <span className="text-zinc-300 font-medium">GridFlux v1.1.0</span>
           <span>•</span>
-          <span>Fuzzy Mamdani (27 Rules) + DE/best/1/bin</span>
+          <span>Mamdani FIS + DE/best/1/bin</span>
           <span>•</span>
-          <span className="text-emerald-400">Deterministic Engine Active</span>
+          <span className="text-[#3ecf8e]">Inverter Ramp-Rate Smooth</span>
         </div>
-        <div className="text-slate-400">
+        <div>
           Course 26B16CS311: Fundamentals of Soft Computing • CO4 System
         </div>
       </footer>

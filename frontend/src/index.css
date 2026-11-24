@@ -2,53 +2,52 @@
 
 @layer base {
   :root {
-    --bg-main: #070b12;
-    --bg-surface: #0c1322;
-    --bg-elevated: #111a2e;
-    --border-subtle: #1e293b;
-    --border-accent: #334155;
-    --color-solar: #eab308;
+    --bg-base: #121212;
+    --bg-surface: #171717;
+    --bg-card: #1c1c1c;
+    --border-subtle: #262626;
+    --border-strong: #333333;
+    --supabase-green: #3ecf8e;
+    --color-solar: #f59e0b;
     --color-battery: #06b6d4;
     --color-grid: #f97316;
-    --color-fde: #10b981;
-    --color-de: #6366f1;
-    --color-rule: #a855f7;
   }
 
   body {
-    background-color: var(--bg-main);
-    color: #cbd5e1;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    background-color: var(--bg-base);
+    color: #f4f4f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     margin: 0;
     padding: 0;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* Monospace Tabular figures for telemetry accuracy */
+/* Monospace Tabular figures for power metrics */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
   font-family: "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-/* Subtle engineering grid background */
-.bg-grid-mesh {
-  background-image: radial-gradient(rgba(51, 65, 85, 0.4) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
-/* Custom crisp technical scrollbars */
+/* Supabase Studio custom subtle scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #090e18;
+  background: #141414;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #2a2a2a;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #383838;
+}
+
+/* Supabase subtle dot mesh */
+.bg-supabase-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
