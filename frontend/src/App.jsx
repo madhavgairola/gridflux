@@ -74,7 +74,7 @@ export default function App() {
 
       const data = await response.json();
       setOptimizationData(data);
-      setSimulatedHourIdx(0); // Reset simulation to start
+      setSimulatedHourIdx(0);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Could not connect to optimization backend');
@@ -90,7 +90,7 @@ export default function App() {
   const fde = optimizationData ? optimizationData.fuzzy_de : null;
   const pde = optimizationData ? optimizationData.plain_de : null;
   const rb = optimizationData ? optimizationData.rule_based : null;
-  const timeLabels = optimizationData ? optimizationData.scenario.time_labels : [];
+  const timeLabels = optimizationData && optimizationData.scenario ? optimizationData.scenario.time_labels : [];
 
   return (
     <div className="min-h-screen bg-[#121212] text-zinc-200 flex flex-col font-sans select-none">
@@ -174,6 +174,7 @@ export default function App() {
             {fde ? (
               <LiveSimulator
                 fdeResult={fde}
+                pdeResult={pde}
                 rbResult={rb}
                 timeLabels={timeLabels}
                 currentHour={simulatedHourIdx}
@@ -268,11 +269,11 @@ export default function App() {
       {/* Supabase Footer */}
       <footer className="border-t border-[#262626] bg-[#141414] px-6 py-2.5 text-[11px] font-mono text-zinc-500 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="text-zinc-300 font-medium">GridFlux v1.3.0</span>
+          <span className="text-zinc-300 font-medium">GridFlux v1.4.0</span>
           <span>•</span>
           <span>Mamdani FIS + DE/best/1/bin</span>
           <span>•</span>
-          <span className="text-[#3ecf8e]">Multi-Page Workbench Active</span>
+          <span className="text-[#3ecf8e]">Multi-Mode Simulation Active</span>
         </div>
         <div>
           Course 26B16CS311: Fundamentals of Soft Computing • CO4 System

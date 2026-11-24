@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Sun, Battery, Zap, Building2, CheckCircle2, Award, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Play, Pause, RotateCcw, Sun, Battery, Zap, Building2, CheckCircle2, Award, Clock, GitCompare, Layers } from 'lucide-react';
 
-// Monotone-clamped cubic spline for progressive curves
+// Safe Monotone-clamped cubic spline for progressive curves
 function getMonotonePath(points) {
   if (!points || points.length === 0) return '';
   if (points.length === 1) return `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+  if (points.length === 2) return `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)} L ${points[1][0].toFixed(1)} ${points[1][1].toFixed(1)}`;
 
   const n = points.length;
   const dxs = [];
@@ -49,6 +50,7 @@ function getMonotonePath(points) {
 
 export default function LiveSimulator({
   fdeResult,
+  pdeResult,
   rbResult,
   timeLabels,
   currentHour,
@@ -56,6 +58,7 @@ export default function LiveSimulator({
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [simMode, setSimMode] = useState('fde'); // 'fde' (Fuzzy+DE) | 'pde' (Plain DE) | 'rb' (Rule-Based Normal) | 'dual' (Fuzzy+DE vs Normal)
   const [activeSeries, setActiveSeries] = useState({
     solar: true,
     load: true,
@@ -63,7 +66,7 @@ export default function LiveSimulator({
     grid: true
   });
 
-  const N = timeLabels ? timeLabels.length : 24;
+  const N = timeLabels && timeLabels.length > 0 ? timeLabels.length : 24;
 
   // Auto-advance timer when playing
   useEffect(() => {
@@ -72,11 +75,12 @@ export default function LiveSimulator({
       const intervalMs = Math.max(120, Math.floor(800 / speed));
       timer = setInterval(() => {
         onHourChange((prev) => {
-          if (prev >= N - 1) {
+          const currentVal = typeof prev === 'number' ? prev : 0;
+          if (currentVal >= N - 1) {
             setIsPlaying(false);
-            return prev;
+            return currentVal;
           }
-          return prev + 1;
+          return currentVal + 1;
         });
       }, intervalMs);
     }
@@ -87,22 +91,31 @@ export default function LiveSimulator({
 
   if (!fdeResult || !timeLabels || timeLabels.length === 0) return null;
 
-  const t = Math.min(currentHour, fdeResult.solar_kw.length - 1);
+  // Determine which active algorithm dataset to track
+  const activeDataset =
+    simMode === 'pde' && pdeResult
+      ? pdeResult
+      : simMode === 'rb' && rbResult
+      ? rbResult
+      : fdeResult;
+
+  const t = Math.max(0, Math.min(Number(currentHour) || 0, activeDataset.solar_kw.length - 1));
   const hourLabel = timeLabels[t] || '00:00';
   const isSimulationComplete = t >= N - 1;
 
-  // Current values at simulated hour t
-  const solarNow = fdeResult.solar_kw[t];
-  const loadNow = fdeResult.load_kw[t];
-  const batFde = fdeResult.battery_kw[t];
-  const gridFde = fdeResult.grid_import_kw[t];
-  const socFde = fdeResult.battery_soc[t];
+  // Real-time telemetry at hour t for currently active algorithm
+  const solarNow = Number(activeDataset.solar_kw[t]) || 0;
+  const loadNow = Number(activeDataset.load_kw[t]) || 0;
+  const batNow = Number(activeDataset.battery_kw[t]) || 0;
+  const gridNow = Number(activeDataset.grid_import_kw[t]) || 0;
+  const socNow = Number(activeDataset.battery_soc[t]) || 0.5;
 
-  const batRb = rbResult ? rbResult.battery_kw[t] : 0;
-  const gridRb = rbResult ? rbResult.grid_import_kw[t] : 0;
-  const socRb = rbResult ? rbResult.battery_soc[t] : 0.5;
+  // Baseline telemetry at hour t for comparative evaluation
+  const batRb = rbResult && rbResult.battery_kw ? Number(rbResult.battery_kw[t]) || 0 : 0;
+  const gridRb = rbResult && rbResult.grid_import_kw ? Number(rbResult.grid_import_kw[t]) || 0 : 0;
+  const socRb = rbResult && rbResult.battery_soc ? Number(rbResult.battery_soc[t]) || 0.5 : 0.5;
 
-  // Cumulative tracking up to hour t
+  // Cumulative cost calculation up to hour t
   const dt = fdeResult.dt_hours || 1.0;
   let cumCostFde = 0;
   let cumCostRb = 0;
@@ -110,14 +123,12 @@ export default function LiveSimulator({
   let maxGridRbSoFar = 0;
 
   for (let i = 0; i <= t; i++) {
-    cumCostFde += Math.max(0, fdeResult.grid_import_kw[i]) * 0.18 * dt;
-    if (rbResult) {
-      cumCostRb += Math.max(0, rbResult.grid_import_kw[i]) * 0.18 * dt;
+    cumCostFde += Math.max(0, Number(fdeResult.grid_import_kw[i]) || 0) * 0.18 * dt;
+    if (rbResult && rbResult.grid_import_kw) {
+      cumCostRb += Math.max(0, Number(rbResult.grid_import_kw[i]) || 0) * 0.18 * dt;
+      maxGridRbSoFar = Math.max(maxGridRbSoFar, Number(rbResult.grid_import_kw[i]) || 0);
     }
-    maxGridFdeSoFar = Math.max(maxGridFdeSoFar, fdeResult.grid_import_kw[i]);
-    if (rbResult) {
-      maxGridRbSoFar = Math.max(maxGridRbSoFar, rbResult.grid_import_kw[i]);
-    }
+    maxGridFdeSoFar = Math.max(maxGridFdeSoFar, Number(fdeResult.grid_import_kw[i]) || 0);
   }
 
   const liveSavedDollars = Math.max(0, cumCostRb - cumCostFde);
@@ -125,7 +136,7 @@ export default function LiveSimulator({
 
   // Progressive Chart Geometry
   const width = 880;
-  const height = 320;
+  const height = 330;
   const padding = { top: 25, right: 30, bottom: 40, left: 75 };
 
   const minPower = -120;
@@ -134,123 +145,214 @@ export default function LiveSimulator({
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  const scaleX = (idx) => padding.left + (idx / (N - 1)) * chartW;
+  const scaleX = (idx) => padding.left + (idx / Math.max(1, N - 1)) * chartW;
   const scaleY = (val) => padding.top + chartH - ((val - minPower) / (maxPower - minPower)) * chartH;
   const yZero = scaleY(0);
 
-  // PROGRESSIVE SLICING: ONLY UP TO CURRENT HOUR t!
+  // Progressive slicing up to hour t
   const revealedLength = t + 1;
-  const solarPoints = fdeResult.solar_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
-  const loadPoints = fdeResult.load_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
-  const batteryPoints = fdeResult.battery_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
-  const gridPoints = fdeResult.grid_import_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const solarPoints = activeDataset.solar_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const loadPoints = activeDataset.load_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const batteryPoints = activeDataset.battery_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const gridPoints = activeDataset.grid_import_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
+
+  // Comparative baseline curves (if in dual mode or rule-based)
+  const rbGridPoints = rbResult && rbResult.grid_import_kw
+    ? rbResult.grid_import_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)])
+    : [];
 
   const currentX = scaleX(t);
 
-  // AI Narrative Commentary
+  // AI Narrative Commentary based on selected mode
   let aiExplanation = '';
-  if (solarNow > loadNow) {
-    if (batFde > 10) {
-      aiExplanation = `Surplus solar (${solarNow.toFixed(1)} kW > load ${loadNow.toFixed(1)} kW). Fuzzy controller routes +${batFde.toFixed(1)} kW into Battery. Utility grid import is 0 kW.`;
-    } else {
-      aiExplanation = `Solar fully powers the microgrid. Battery is at ${(socFde * 100).toFixed(0)}% capacity. Clean renewable autonomy.`;
-    }
-  } else if (loadNow > 180) {
-    if (batFde < -15) {
-      aiExplanation = `High load demand (${loadNow.toFixed(1)} kW). Fuzzy controller fires discharge (-${Math.abs(batFde).toFixed(1)} kW), trimming grid draw to ${gridFde.toFixed(1)} kW (preventing a ${gridRb.toFixed(1)} kW baseline surge!).`;
-    } else {
-      aiExplanation = `High demand window. Balanced dispatch preserving battery reserves.`;
-    }
+  if (simMode === 'rb') {
+    aiExplanation = `Normal Greedy Baseline Active: Solar serves load directly, then dumps into battery without forward lookahead. During evening peak hours, battery is depleted, triggering huge grid import spikes.`;
+  } else if (simMode === 'pde') {
+    aiExplanation = `Plain DE Active (Standard Evolutionary Algorithm): Minimizes mathematical cost without Mamdani linguistic rules. Can get trapped in suboptimal operating regimes during tariff transitions.`;
   } else {
-    aiExplanation = `Off-peak steady balance. Battery floating, grid import held at economic baseline.`;
+    if (solarNow > loadNow) {
+      if (batNow > 10) {
+        aiExplanation = `[Fuzzy Rule Fired]: Surplus solar (${solarNow.toFixed(1)} kW > ${loadNow.toFixed(1)} kW load). Mamdani engine commands battery charging (+${batNow.toFixed(1)} kW) to store clean energy for the evening peak. Grid import: 0 kW.`;
+      } else {
+        aiExplanation = `[Fuzzy Rule Fired]: Solar powers 100% of microgrid load. Battery state of charge is optimal (${(socNow * 100).toFixed(0)}%). Zero grid dependency.`;
+      }
+    } else if (loadNow > 180) {
+      if (batNow < -15) {
+        aiExplanation = `[Fuzzy Peak Shave]: Critical peak demand (${loadNow.toFixed(1)} kW). Fuzzy rules trigger battery discharge (-${Math.abs(batNow).toFixed(1)} kW), flattening grid draw to ${gridNow.toFixed(1)} kW (preventing a ${gridRb.toFixed(1)} kW baseline surge!).`;
+      } else {
+        aiExplanation = `[Fuzzy Balancer]: Evening load support. Preserving battery health within safe SoC limits.`;
+      }
+    } else {
+      aiExplanation = `[Fuzzy Steady State]: Off-peak balance. Grid tariff is low ($0.08/kWh). Managing battery throughput to minimize degradation wear.`;
+    }
   }
 
   return (
     <div className="space-y-5">
-      {/* 1. Supabase-style Playback Bar */}
-      <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
-        <div className="flex items-center gap-3">
+      {/* 1. Supabase Studio Simulation Mode Selector & Playback Bar */}
+      <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm space-y-4">
+        {/* Row 1: Algorithm Mode Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#262626] pb-3">
           <div className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${isPlaying ? 'bg-[#3ecf8e] animate-pulse' : 'bg-amber-400'}`}></span>
-            <span className="text-sm font-semibold text-zinc-100 font-mono tracking-wide">
-              {isPlaying ? 'SIMULATION IN PROGRESS' : isSimulationComplete ? 'SIMULATION COMPLETED' : 'SIMULATION PAUSED'}
+            <Layers className="w-4 h-4 text-[#3ecf8e]" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-100 font-mono">
+              Simulation Dispatch Mode:
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-[#202020] border border-[#333] px-3 py-1 rounded-md text-xs font-mono text-zinc-200">
-            <Clock className="w-3.5 h-3.5 text-[#3ecf8e]" />
-            <span>Progress: <b className="text-zinc-100">{hourLabel}</b> / 24:00</span>
+          <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+            <button
+              onClick={() => {
+                setSimMode('fde');
+                onHourChange(0);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border ${
+                simMode === 'fde'
+                  ? 'bg-[#14231b] text-[#3ecf8e] border-[#244b36] font-bold shadow-sm'
+                  : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#3ecf8e]"></span>
+              <span>Proposed: Fuzzy + DE</span>
+            </button>
+
+            {pdeResult && (
+              <button
+                onClick={() => {
+                  setSimMode('pde');
+                  onHourChange(0);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border ${
+                  simMode === 'pde'
+                    ? 'bg-[#1a1c2e] text-indigo-400 border-indigo-500/40 font-bold shadow-sm'
+                    : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                <span>Plain DE (No Fuzzy)</span>
+              </button>
+            )}
+
+            {rbResult && (
+              <button
+                onClick={() => {
+                  setSimMode('rb');
+                  onHourChange(0);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border ${
+                  simMode === 'rb'
+                    ? 'bg-[#251829] text-purple-400 border-purple-500/40 font-bold shadow-sm'
+                    : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                <span>Normal Heuristic / Greedy</span>
+              </button>
+            )}
+
+            {rbResult && (
+              <button
+                onClick={() => {
+                  setSimMode('dual');
+                  onHourChange(0);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border ${
+                  simMode === 'dual'
+                    ? 'bg-[#222] text-amber-300 border-amber-500/50 font-bold shadow-sm'
+                    : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
+                }`}
+              >
+                <GitCompare className="w-3.5 h-3.5" />
+                <span>Dual Comparison (Overlay)</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Playback Controls */}
-        <div className="flex items-center gap-2 text-xs font-mono">
-          <button
-            onClick={() => {
-              if (isSimulationComplete) {
+        {/* Row 2: Playback Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${isPlaying ? 'bg-[#3ecf8e] animate-pulse' : 'bg-amber-400'}`}></span>
+              <span className="text-sm font-semibold text-zinc-100 font-mono tracking-wide">
+                {isPlaying ? 'SIMULATION IN PROGRESS' : isSimulationComplete ? 'SIMULATION COMPLETE' : 'READY TO SIMULATE'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-[#202020] border border-[#333] px-3 py-1 rounded-md text-xs font-mono text-zinc-200">
+              <Clock className="w-3.5 h-3.5 text-[#3ecf8e]" />
+              <span>Simulated Time: <b className="text-zinc-100">{hourLabel}</b> / 24:00</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <button
+              onClick={() => {
+                if (isSimulationComplete) {
+                  onHourChange(0);
+                  setIsPlaying(true);
+                } else {
+                  setIsPlaying(!isPlaying);
+                }
+              }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-md font-semibold text-xs transition-all cursor-pointer ${
+                isPlaying
+                  ? 'bg-amber-500 hover:bg-amber-400 text-black'
+                  : 'bg-[#3ecf8e] hover:bg-[#34b27b] text-black shadow-sm'
+              }`}
+            >
+              {isPlaying ? (
+                <>
+                  <Pause className="w-3.5 h-3.5 fill-current" />
+                  <span>Pause</span>
+                </>
+              ) : isSimulationComplete ? (
+                <>
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Re-run Simulation</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Start 24h Run</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                setIsPlaying(false);
                 onHourChange(0);
-                setIsPlaying(true);
-              } else {
-                setIsPlaying(!isPlaying);
-              }
-            }}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-md font-semibold text-xs transition-all ${
-              isPlaying
-                ? 'bg-amber-500 hover:bg-amber-400 text-black'
-                : 'bg-[#3ecf8e] hover:bg-[#34b27b] text-black shadow-sm'
-            }`}
-          >
-            {isPlaying ? (
-              <>
-                <Pause className="w-3.5 h-3.5 fill-current" />
-                <span>Pause</span>
-              </>
-            ) : isSimulationComplete ? (
-              <>
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Re-simulate 24h</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Play Simulation</span>
-              </>
-            )}
-          </button>
+              }}
+              className="flex items-center gap-1 bg-[#222] hover:bg-[#282828] border border-[#333] text-zinc-300 px-3 py-2 rounded-md transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
+            </button>
 
-          <button
-            onClick={() => {
-              setIsPlaying(false);
-              onHourChange(0);
-            }}
-            className="flex items-center gap-1 bg-[#222] hover:bg-[#282828] border border-[#333] text-zinc-300 px-3 py-2 rounded-md transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset to 00:00</span>
-          </button>
-
-          <div className="flex items-center bg-[#222] border border-[#333] rounded-md overflow-hidden">
-            {[1, 2, 4].map((spd) => (
-              <button
-                key={spd}
-                onClick={() => setSpeed(spd)}
-                className={`px-2.5 py-1.5 text-xs transition-colors ${
-                  speed === spd ? 'bg-[#333] text-[#3ecf8e] font-bold' : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                {spd}x
-              </button>
-            ))}
+            <div className="flex items-center bg-[#222] border border-[#333] rounded-md overflow-hidden">
+              {[1, 2, 4].map((spd) => (
+                <button
+                  key={spd}
+                  onClick={() => setSpeed(spd)}
+                  className={`px-2.5 py-1.5 text-xs transition-colors cursor-pointer ${
+                    speed === spd ? 'bg-[#333] text-[#3ecf8e] font-bold' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  {spd}x
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Interactive Power Flow Diagram */}
+      {/* 2. Microgrid Physical Flow Telemetry Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
             <span className="flex items-center gap-1.5 text-amber-400 font-medium">
-              <Sun className="w-4 h-4" /> Solar PV
+              <Sun className="w-4 h-4" /> Solar PV Array
             </span>
             <span className="text-[10px] bg-[#221e14] text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded">
               {solarNow > 10 ? 'Generating' : 'Dark'}
@@ -263,7 +365,7 @@ export default function LiveSimulator({
             <span className="text-xs text-zinc-400 ml-1 font-mono">kW</span>
           </div>
           <div className="text-xs font-mono text-zinc-400">
-            Capacity: 280 kW max
+            Peak Capacity: 280 kW max
           </div>
         </div>
 
@@ -272,24 +374,24 @@ export default function LiveSimulator({
             <span className="flex items-center gap-1.5 text-cyan-400 font-medium">
               <Battery className="w-4 h-4" /> Battery Storage
             </span>
-            <span className="text-[10px] bg-[#14231b] text-[#3ecf8e] border border-[#244b36] px-1.5 py-0.2 rounded">
-              {batFde > 5 ? 'Charging' : batFde < -5 ? 'Discharging' : 'Float'}
+            <span className="text-[10px] bg-[#14231b] text-[#3ecf8e] border border-[#244b36] px-1.5 py-0.2 rounded font-mono">
+              {batNow > 5 ? 'Charging' : batNow < -5 ? 'Discharging' : 'Float'}
             </span>
           </div>
           <div className="my-2 flex items-baseline justify-between">
             <div>
               <span className="text-3xl font-bold font-mono text-zinc-100 tabular-nums">
-                {batFde > 0 ? '+' : ''}{batFde.toFixed(1)}
+                {batNow > 0 ? '+' : ''}{batNow.toFixed(1)}
               </span>
               <span className="text-xs text-zinc-400 ml-1 font-mono">kW</span>
             </div>
             <span className="text-lg font-bold font-mono text-[#3ecf8e]">
-              {(socFde * 100).toFixed(0)}%
+              {(socNow * 100).toFixed(0)}% SoC
             </span>
           </div>
           <div className="h-1.5 w-full bg-[#242424] rounded-full overflow-hidden">
             <div
-              style={{ width: `${socFde * 100}%` }}
+              style={{ width: `${Math.min(100, Math.max(0, socNow * 100))}%` }}
               className="h-full bg-[#3ecf8e] transition-all duration-200"
             ></div>
           </div>
@@ -311,7 +413,7 @@ export default function LiveSimulator({
             <span className="text-xs text-zinc-400 ml-1 font-mono">kW</span>
           </div>
           <div className="text-xs font-mono text-zinc-400">
-            Served: 100% reliably
+            Reliability: 100% served
           </div>
         </div>
 
@@ -321,35 +423,35 @@ export default function LiveSimulator({
               <Zap className="w-4 h-4" /> Grid Connection
             </span>
             <span
-              className={`text-[10px] px-1.5 py-0.2 rounded border ${
-                gridFde <= 5
+              className={`text-[10px] px-1.5 py-0.2 rounded border font-mono ${
+                gridNow <= 5
                   ? 'bg-[#14231b] text-[#3ecf8e] border-[#244b36]'
                   : 'bg-[#261c16] text-orange-400 border-orange-500/30'
               }`}
             >
-              {gridFde <= 5 ? 'Zero Draw' : 'Importing'}
+              {gridNow <= 5 ? 'Zero Draw' : 'Importing'}
             </span>
           </div>
           <div className="my-2 flex items-baseline justify-between">
             <div>
               <span className="text-3xl font-bold font-mono text-zinc-100 tabular-nums">
-                {gridFde.toFixed(1)}
+                {gridNow.toFixed(1)}
               </span>
               <span className="text-xs text-zinc-400 ml-1 font-mono">kW</span>
             </div>
-            {rbResult && (
+            {rbResult && simMode !== 'rb' && (
               <span className="text-xs font-mono text-zinc-500 line-through">
                 {gridRb.toFixed(1)} kW
               </span>
             )}
           </div>
           <div className="text-xs font-mono text-[#3ecf8e]">
-            {gridFde < gridRb ? `Shaved ${(gridRb - gridFde).toFixed(1)} kW` : 'Grid optimal'}
+            {simMode !== 'rb' && gridNow < gridRb ? `Shaved ${(gridRb - gridNow).toFixed(1)} kW` : 'Operating state'}
           </div>
         </div>
       </div>
 
-      {/* 3. PROGRESSIVE REAL-TIME CHART: Draws hour-by-hour up to hour t! */}
+      {/* 3. Progressive Drawing Canvas: Draws hour-by-hour up to hour t! */}
       <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3 border-b border-[#262626] pb-3">
           <div>
@@ -358,19 +460,18 @@ export default function LiveSimulator({
                 Live Progressive Power Curve Drawing
               </h3>
               <span className="text-[10px] font-mono text-[#3ecf8e] bg-[#14231b] border border-[#244b36] px-2 py-0.5 rounded">
-                Plotting up to {hourLabel}
+                Plotting from 00:00 to {hourLabel}
               </span>
             </div>
             <p className="text-xs text-zinc-300 mt-0.5">
-              Graph reveals in real time as the scenario runs from 00:00 to 24:00
+              The graph reveals dynamically with time. Future hours stay masked until simulated.
             </p>
           </div>
 
-          {/* Series Toggles */}
           <div className="flex items-center gap-1.5 text-xs font-mono">
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, solar: !s.solar }))}
-              className={`px-2.5 py-1 rounded text-xs border ${
+              className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
                 activeSeries.solar ? 'bg-[#221e14] border-amber-500/50 text-amber-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
               }`}
             >
@@ -378,7 +479,7 @@ export default function LiveSimulator({
             </button>
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, load: !s.load }))}
-              className={`px-2.5 py-1 rounded text-xs border ${
+              className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
                 activeSeries.load ? 'bg-[#202020] border-zinc-500/50 text-zinc-200' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
               }`}
             >
@@ -386,7 +487,7 @@ export default function LiveSimulator({
             </button>
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, battery: !s.battery }))}
-              className={`px-2.5 py-1 rounded text-xs border ${
+              className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
                 activeSeries.battery ? 'bg-[#132228] border-cyan-500/50 text-cyan-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
               }`}
             >
@@ -394,7 +495,7 @@ export default function LiveSimulator({
             </button>
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, grid: !s.grid }))}
-              className={`px-2.5 py-1 rounded text-xs border ${
+              className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
                 activeSeries.grid ? 'bg-[#261c16] border-orange-500/50 text-orange-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
               }`}
             >
@@ -481,7 +582,7 @@ export default function LiveSimulator({
 
             {/* Trace 1: Solar (Drawn up to hour t!) */}
             {activeSeries.solar && solarPoints.length > 0 && (
-              <g>
+              <g pointerEvents="none">
                 <path
                   d={`${getMonotonePath(solarPoints)} L ${currentX} ${yZero} L ${scaleX(0)} ${yZero} Z`}
                   fill="url(#liveSolarGrad)"
@@ -499,6 +600,7 @@ export default function LiveSimulator({
             {/* Trace 2: Load (Drawn up to hour t!) */}
             {activeSeries.load && loadPoints.length > 0 && (
               <path
+                pointerEvents="none"
                 d={getMonotonePath(loadPoints)}
                 fill="none"
                 stroke="#a1a1aa"
@@ -511,6 +613,7 @@ export default function LiveSimulator({
             {/* Trace 3: Battery (Drawn up to hour t!) */}
             {activeSeries.battery && batteryPoints.length > 0 && (
               <path
+                pointerEvents="none"
                 d={getMonotonePath(batteryPoints)}
                 fill="none"
                 stroke="#06b6d4"
@@ -522,6 +625,7 @@ export default function LiveSimulator({
             {/* Trace 4: Grid Import (Drawn up to hour t!) */}
             {activeSeries.grid && gridPoints.length > 0 && (
               <path
+                pointerEvents="none"
                 d={getMonotonePath(gridPoints)}
                 fill="none"
                 stroke="#f97316"
@@ -530,8 +634,22 @@ export default function LiveSimulator({
               />
             )}
 
+            {/* Dual Comparison: Unoptimized Baseline Curve Overlay */}
+            {simMode === 'dual' && rbGridPoints.length > 0 && (
+              <path
+                pointerEvents="none"
+                d={getMonotonePath(rbGridPoints)}
+                fill="none"
+                stroke="#f43f5e"
+                strokeWidth="2.0"
+                strokeDasharray="5 3"
+                strokeLinecap="round"
+              />
+            )}
+
             {/* Live Front Needle / Cursor */}
             <line
+              pointerEvents="none"
               x1={currentX}
               y1={padding.top}
               x2={currentX}
@@ -539,9 +657,11 @@ export default function LiveSimulator({
               stroke="#3ecf8e"
               strokeWidth="2"
             />
+            {/* Safe point marker at current head */}
             <circle
+              pointerEvents="none"
               cx={currentX}
-              cy={scaleY(gridImportKw[t])}
+              cy={scaleY(gridNow)}
               r="5"
               fill="#f97316"
               stroke="#fff"
@@ -551,11 +671,11 @@ export default function LiveSimulator({
         </div>
       </div>
 
-      {/* 4. Live "What Would Have Happened" Baseline Comparison */}
+      {/* 4. Live Comparative Benchmark Box */}
       <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm">
-        <h4 className="text-xs font-bold text-zinc-100 uppercase tracking-wider font-mono mb-3 flex items-center gap-2">
+        <h4 className="text-xs font-bold text-zinc-100 uppercase tracking-wider font-mono mb-3 flex items-center justify-between">
           <span>Comparative Scenario Benchmark (Hour {hourLabel})</span>
-          <span className="text-[10px] font-normal text-zinc-400 lowercase">vs Unoptimized Baseline</span>
+          <span className="text-[10px] text-zinc-400 font-normal">Active Mode: {simMode.toUpperCase()}</span>
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-xs">
@@ -566,7 +686,9 @@ export default function LiveSimulator({
             <div className="mt-2 space-y-1">
               <div className="flex justify-between">
                 <span className="text-zinc-400">Current Grid Import:</span>
-                <span className="font-bold text-zinc-100 tabular-nums">{gridFde.toFixed(1)} kW</span>
+                <span className="font-bold text-zinc-100 tabular-nums">
+                  {fdeResult.grid_import_kw ? Number(fdeResult.grid_import_kw[t]).toFixed(1) : 0} kW
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-400">Peak Import So Far:</span>
@@ -574,7 +696,9 @@ export default function LiveSimulator({
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-400">Battery Status:</span>
-                <span className="text-cyan-400 tabular-nums">{(socFde * 100).toFixed(0)}% SoC</span>
+                <span className="text-cyan-400 tabular-nums">
+                  {fdeResult.battery_soc ? (Number(fdeResult.battery_soc[t]) * 100).toFixed(0) : 50}% SoC
+                </span>
               </div>
             </div>
           </div>
@@ -620,7 +744,7 @@ export default function LiveSimulator({
 
         {/* Live AI Commentary */}
         <div className="mt-3 pt-3 border-t border-[#262626] flex items-center gap-2 text-xs font-mono">
-          <span className="text-[#3ecf8e] font-bold shrink-0">[AI DECISION]:</span>
+          <span className="text-[#3ecf8e] font-bold shrink-0">[ENGINE STATUS]:</span>
           <span className="text-zinc-200">{aiExplanation}</span>
         </div>
       </div>
@@ -637,7 +761,7 @@ export default function LiveSimulator({
                 24-Hour Microgrid Simulation Complete!
               </h3>
               <p className="text-xs text-zinc-300">
-                The hybrid Fuzzy + DE system successfully shaved the grid peak and preserved battery health.
+                The simulated run finished successfully across the complete 24-hour cycle.
               </p>
             </div>
           </div>
@@ -653,7 +777,7 @@ export default function LiveSimulator({
             </div>
             <div>
               <div className="text-zinc-400 text-[10px]">SOLAR SELF-USE</div>
-              <div className="text-lg font-bold text-amber-400">{fdeResult.renewable_utilization_pct.toFixed(1)}%</div>
+              <div className="text-lg font-bold text-amber-400">{activeDataset.renewable_utilization_pct.toFixed(1)}%</div>
             </div>
           </div>
         </div>
