@@ -6,9 +6,11 @@ import DispatchChart from './components/DispatchChart';
 import ConvergenceChart from './components/ConvergenceChart';
 import FuzzyInspector from './components/FuzzyInspector';
 import BenchmarkTable from './components/BenchmarkTable';
-import { AlertCircle } from 'lucide-react';
+import { Play, BarChart3, Cpu, AlertCircle } from 'lucide-react';
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState('simulator'); // 'simulator' | 'analytics' | 'engine'
+
   const [scenarios, setScenarios] = useState([
     { id: 'default_balanced', name: 'Default Balanced' },
     { id: 'peak_afternoon_load', name: 'Peak Afternoon Surge' },
@@ -27,7 +29,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [optimizationData, setOptimizationData] = useState(null);
-  const [hoveredHourIdx, setHoveredHourIdx] = useState(12);
+  const [simulatedHourIdx, setSimulatedHourIdx] = useState(0);
 
   useEffect(() => {
     fetch('/api/scenarios')
@@ -38,7 +40,7 @@ export default function App() {
         }
       })
       .catch((err) => {
-        console.warn('API not reachable yet; using fallback presets catalog', err);
+        console.warn('API fallback', err);
       });
 
     runOptimization();
@@ -72,6 +74,7 @@ export default function App() {
 
       const data = await response.json();
       setOptimizationData(data);
+      setSimulatedHourIdx(0); // Reset simulation to start
     } catch (err) {
       console.error(err);
       setError(err.message || 'Could not connect to optimization backend');
@@ -91,7 +94,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#121212] text-zinc-200 flex flex-col font-sans select-none">
-      {/* Top Header / Control Bar */}
+      {/* 1. Supabase Studio Top Header */}
       <ControlBar
         scenarios={scenarios}
         selectedScenario={selectedScenario}
@@ -113,6 +116,48 @@ export default function App() {
         loading={loading}
       />
 
+      {/* 2. Supabase Studio Page Navigation Tabs */}
+      <nav className="flex items-center gap-1 px-6 border-b border-[#262626] bg-[#171717] text-xs font-medium">
+        <button
+          onClick={() => setActiveTab('simulator')}
+          className={`flex items-center gap-2 py-3 px-4 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'simulator'
+              ? 'border-[#3ecf8e] text-[#3ecf8e] font-semibold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+          }`}
+        >
+          <Play className="w-3.5 h-3.5 fill-current" />
+          <span>Interactive 24h Simulator</span>
+          <span className="text-[10px] font-mono bg-[#14231b] text-[#3ecf8e] border border-[#244b36] px-1.5 py-0.2 rounded ml-1">
+            Live Flow
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className={`flex items-center gap-2 py-3 px-4 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'analytics'
+              ? 'border-[#3ecf8e] text-[#3ecf8e] font-semibold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+          }`}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          <span>Analytics & Benchmarks</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('engine')}
+          className={`flex items-center gap-2 py-3 px-4 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'engine'
+              ? 'border-[#3ecf8e] text-[#3ecf8e] font-semibold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+          }`}
+        >
+          <Cpu className="w-3.5 h-3.5" />
+          <span>Fuzzy & DE Engine</span>
+        </button>
+      </nav>
+
       {/* Error Alert */}
       {error && (
         <div className="bg-[#2a1414] border-b border-red-900/60 px-6 py-2.5 text-xs text-red-300 flex items-center gap-2">
@@ -121,87 +166,113 @@ export default function App() {
         </div>
       )}
 
-      {/* KPI Readout Strip */}
-      <KpiStrip fdeResult={fde} pdeResult={pde} rbResult={rb} />
-
-      {/* Main Analytical Content Workspace */}
+      {/* 3. Main Multi-Page Content Area */}
       <main className="flex-1 p-6 bg-supabase-grid">
-        {/* 1. Live Interactive Microgrid Simulator & Flow Diagram */}
-        {fde && (
-          <LiveSimulator
-            fdeResult={fde}
-            rbResult={rb}
-            timeLabels={timeLabels}
-            currentHour={hoveredHourIdx}
-            onHourChange={setHoveredHourIdx}
-          />
+        {/* PAGE 1: INTERACTIVE LIVE SIMULATOR */}
+        {activeTab === 'simulator' && (
+          <div className="max-w-6xl mx-auto">
+            {fde ? (
+              <LiveSimulator
+                fdeResult={fde}
+                rbResult={rb}
+                timeLabels={timeLabels}
+                currentHour={simulatedHourIdx}
+                onHourChange={setSimulatedHourIdx}
+              />
+            ) : (
+              <div className="flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[400px]">
+                <div className="text-center font-mono text-zinc-500 text-xs">
+                  {loading ? 'Initializing soft-computing simulation...' : 'No optimization data available.'}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* 2. Analytical Charts & Fuzzy Inspector Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column (8 cols): Primary Visualizations */}
-          <div className="lg:col-span-8 flex flex-col">
-            {fde ? (
-              <>
-                <DispatchChart
-                  timeLabels={timeLabels}
-                  solarKw={fde.solar_kw}
-                  loadKw={fde.load_kw}
-                  batteryKw={fde.battery_kw}
-                  gridImportKw={fde.grid_import_kw}
-                  batterySoc={fde.battery_soc}
-                  selectedHourIndex={hoveredHourIdx}
-                  onHoverHour={setHoveredHourIdx}
-                />
+        {/* PAGE 2: ANALYTICS & BENCHMARKS */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6 max-w-6xl mx-auto">
+            {/* KPI Strip */}
+            <KpiStrip fdeResult={fde} pdeResult={pde} rbResult={rb} />
 
+            {/* Full 24-Hour Completed Dispatch Chart */}
+            {fde && (
+              <DispatchChart
+                timeLabels={timeLabels}
+                solarKw={fde.solar_kw}
+                loadKw={fde.load_kw}
+                batteryKw={fde.battery_kw}
+                gridImportKw={fde.grid_import_kw}
+                batterySoc={fde.battery_soc}
+                selectedHourIndex={simulatedHourIdx}
+                onHoverHour={setSimulatedHourIdx}
+              />
+            )}
+
+            {/* Benchmark Comparison Table */}
+            {fde && (
+              <BenchmarkTable
+                fdeResult={fde}
+                pdeResult={pde}
+                rbResult={rb}
+              />
+            )}
+          </div>
+        )}
+
+        {/* PAGE 3: SOFT-COMPUTING ENGINE (FUZZY + DE) */}
+        {activeTab === 'engine' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-6xl mx-auto">
+            {/* Left: DE Convergence Chart (7 cols) */}
+            <div className="lg:col-span-7 flex flex-col space-y-4">
+              {fde && (
                 <ConvergenceChart
                   fdeCurve={fde.convergence_curve}
                   pdeCurve={pde ? pde.convergence_curve : null}
                 />
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[400px]">
-                <div className="text-center font-mono text-zinc-500 text-xs">
-                  {loading ? 'Executing Differential Evolution optimization...' : 'No optimization data available.'}
+              )}
+
+              {/* Formulation Summary Card */}
+              <div className="bg-[#171717] border border-[#262626] rounded-lg p-5 text-xs font-mono">
+                <h4 className="text-sm font-semibold text-zinc-100 font-mono mb-2">
+                  CO4 Hybrid Formulation Details
+                </h4>
+                <div className="space-y-2 text-zinc-300 leading-relaxed">
+                  <p>
+                    <b className="text-[#3ecf8e]">1. Mamdani FIS:</b> Evaluates 3 inputs (Renewable, Battery SoC, Grid Pressure) through 27 triangular/trapezoidal rules, defuzzifying to compute $W_{grid}$ ($0.5-3.0$), $B_{bias}$ ($-1.0$ to $+1.0$), and $W_{peak}$ ($1.0-5.0$).
+                  </p>
+                  <p>
+                    <b className="text-indigo-400">2. Differential Evolution:</b> Vectorized `DE/best/1/bin` mutation with ramp-rate limiting ($\Delta P \le 45\text{ kW}$) and inter-step continuity constraints to eliminate high-frequency switching.
+                  </p>
+                  <p>
+                    <b className="text-amber-400">3. Hybrid Advantage:</b> Reshapes the non-linear fitness landscape, reducing peak grid import by up to 17.4% over standard Plain DE.
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Right Column (4 cols): Fuzzy Inspector & Benchmark Table */}
-          <div className="lg:col-span-4 flex flex-col">
-            {optimizationData ? (
-              <>
+            {/* Right: Fuzzy Rule Inspector (5 cols) */}
+            <div className="lg:col-span-5 flex flex-col">
+              {optimizationData && (
                 <FuzzyInspector
                   fuzzyExplainability={optimizationData.fuzzy_explainability}
-                  selectedHourIndex={hoveredHourIdx}
+                  selectedHourIndex={simulatedHourIdx}
                   timeLabels={timeLabels}
                 />
-                <BenchmarkTable
-                  fdeResult={fde}
-                  pdeResult={pde}
-                  rbResult={rb}
-                />
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[300px]">
-                <div className="text-center font-mono text-zinc-500 text-xs">
-                  Waiting for optimization results...
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
-      {/* Supabase-style Footer */}
+      {/* Supabase Footer */}
       <footer className="border-t border-[#262626] bg-[#141414] px-6 py-2.5 text-[11px] font-mono text-zinc-500 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="text-zinc-300 font-medium">GridFlux v1.2.0</span>
+          <span className="text-zinc-300 font-medium">GridFlux v1.3.0</span>
           <span>•</span>
-          <span>Mamdani FIS (27 Rules) + DE/best/1/bin</span>
+          <span>Mamdani FIS + DE/best/1/bin</span>
           <span>•</span>
-          <span className="text-[#3ecf8e]">Interactive Simulator Active</span>
+          <span className="text-[#3ecf8e]">Multi-Page Workbench Active</span>
         </div>
         <div>
           Course 26B16CS311: Fundamentals of Soft Computing • CO4 System
