@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Sun, Battery, Zap, Building2, CheckCircle2, Award, Clock, GitCompare, Layers } from 'lucide-react';
+import { Play, Pause, RotateCcw, Sun, Battery, Zap, Building2, CheckCircle2, Award, Clock, GitCompare, Layers, Eye } from 'lucide-react';
 
 // Safe Monotone-clamped cubic spline for progressive curves
 function getMonotonePath(points) {
@@ -58,7 +58,7 @@ export default function LiveSimulator({
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [simMode, setSimMode] = useState('fde'); // 'fde' (Fuzzy+DE) | 'pde' (Plain DE) | 'rb' (Rule-Based Normal) | 'dual' (Fuzzy+DE vs Normal)
+  const [simMode, setSimMode] = useState('fde'); // 'fde' | 'pde' | 'rb' | 'dual'
   const [activeSeries, setActiveSeries] = useState({
     solar: true,
     load: true,
@@ -91,31 +91,44 @@ export default function LiveSimulator({
 
   if (!fdeResult || !timeLabels || timeLabels.length === 0) return null;
 
-  // Determine which active algorithm dataset to track
-  const activeDataset =
-    simMode === 'pde' && pdeResult
-      ? pdeResult
-      : simMode === 'rb' && rbResult
-      ? rbResult
-      : fdeResult;
+  // Resolve which dataset is active
+  let activeDataset = fdeResult;
+  let activeModeName = 'Proposed: Fuzzy + DE';
+  let activeColor = '#3ecf8e';
 
-  const t = Math.max(0, Math.min(Number(currentHour) || 0, activeDataset.solar_kw.length - 1));
+  if (simMode === 'pde' && pdeResult) {
+    activeDataset = pdeResult;
+    activeModeName = 'Standard Plain DE (No Fuzzy)';
+    activeColor = '#818cf8';
+  } else if (simMode === 'rb' && rbResult) {
+    activeDataset = rbResult;
+    activeModeName = 'Heuristic Greedy Baseline';
+    activeColor = '#c084fc';
+  } else if (simMode === 'dual') {
+    activeDataset = fdeResult;
+    activeModeName = 'Dual Head-to-Head Comparison';
+    activeColor = '#3ecf8e';
+  }
+
+  const t = Math.max(0, Math.min(Number(currentHour) || 0, N - 1));
   const hourLabel = timeLabels[t] || '00:00';
   const isSimulationComplete = t >= N - 1;
 
-  // Real-time telemetry at hour t for currently active algorithm
+  // Real-time telemetry at hour t
   const solarNow = Number(activeDataset.solar_kw[t]) || 0;
   const loadNow = Number(activeDataset.load_kw[t]) || 0;
   const batNow = Number(activeDataset.battery_kw[t]) || 0;
   const gridNow = Number(activeDataset.grid_import_kw[t]) || 0;
   const socNow = Number(activeDataset.battery_soc[t]) || 0.5;
 
-  // Baseline telemetry at hour t for comparative evaluation
-  const batRb = rbResult && rbResult.battery_kw ? Number(rbResult.battery_kw[t]) || 0 : 0;
-  const gridRb = rbResult && rbResult.grid_import_kw ? Number(rbResult.grid_import_kw[t]) || 0 : 0;
-  const socRb = rbResult && rbResult.battery_soc ? Number(rbResult.battery_soc[t]) || 0.5 : 0.5;
+  // Baseline telemetry at hour t for comparison
+  const gridFdeNow = Number(fdeResult.grid_import_kw[t]) || 0;
+  const gridPdeNow = pdeResult ? Number(pdeResult.grid_import_kw[t]) || 0 : 0;
+  const gridRbNow = rbResult ? Number(rbResult.grid_import_kw[t]) || 0 : 0;
+  const batRbNow = rbResult ? Number(rbResult.battery_kw[t]) || 0 : 0;
+  const socRbNow = rbResult ? Number(rbResult.battery_soc[t]) || 0.5 : 0.5;
 
-  // Cumulative cost calculation up to hour t
+  // Cumulative cost calculations up to hour t
   const dt = fdeResult.dt_hours || 1.0;
   let cumCostFde = 0;
   let cumCostRb = 0;
@@ -134,13 +147,14 @@ export default function LiveSimulator({
   const liveSavedDollars = Math.max(0, cumCostRb - cumCostFde);
   const liveShavedKw = Math.max(0, maxGridRbSoFar - maxGridFdeSoFar);
 
-  // Progressive Chart Geometry
+  // Progressive Chart Dimensions & Scale
   const width = 880;
   const height = 330;
   const padding = { top: 25, right: 30, bottom: 40, left: 75 };
 
+  // Dynamic Y-axis bounds ensuring high peaks in rule-based never clip
   const minPower = -120;
-  const maxPower = 320;
+  const maxPower = 340;
 
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
@@ -149,49 +163,31 @@ export default function LiveSimulator({
   const scaleY = (val) => padding.top + chartH - ((val - minPower) / (maxPower - minPower)) * chartH;
   const yZero = scaleY(0);
 
-  // Progressive slicing up to hour t
-  const revealedLength = t + 1;
+  // PROGRESSIVE REVEAL: Sliced up to current hour t
+  // If at t=0, show at least first 2 points or starting point so chart is never blank!
+  const revealedLength = Math.max(1, t + 1);
+
   const solarPoints = activeDataset.solar_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
   const loadPoints = activeDataset.load_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
   const batteryPoints = activeDataset.battery_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
   const gridPoints = activeDataset.grid_import_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
 
-  // Comparative baseline curves (if in dual mode or rule-based)
+  // Dual Comparison Overlay Points (revealed up to t)
+  const fdeGridPoints = fdeResult.grid_import_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)]);
+  const pdeGridPoints = pdeResult && pdeResult.grid_import_kw
+    ? pdeResult.grid_import_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)])
+    : [];
   const rbGridPoints = rbResult && rbResult.grid_import_kw
     ? rbResult.grid_import_kw.slice(0, revealedLength).map((val, idx) => [scaleX(idx), scaleY(val)])
     : [];
 
   const currentX = scaleX(t);
 
-  // AI Narrative Commentary based on selected mode
-  let aiExplanation = '';
-  if (simMode === 'rb') {
-    aiExplanation = `Normal Greedy Baseline Active: Solar serves load directly, then dumps into battery without forward lookahead. During evening peak hours, battery is depleted, triggering huge grid import spikes.`;
-  } else if (simMode === 'pde') {
-    aiExplanation = `Plain DE Active (Standard Evolutionary Algorithm): Minimizes mathematical cost without Mamdani linguistic rules. Can get trapped in suboptimal operating regimes during tariff transitions.`;
-  } else {
-    if (solarNow > loadNow) {
-      if (batNow > 10) {
-        aiExplanation = `[Fuzzy Rule Fired]: Surplus solar (${solarNow.toFixed(1)} kW > ${loadNow.toFixed(1)} kW load). Mamdani engine commands battery charging (+${batNow.toFixed(1)} kW) to store clean energy for the evening peak. Grid import: 0 kW.`;
-      } else {
-        aiExplanation = `[Fuzzy Rule Fired]: Solar powers 100% of microgrid load. Battery state of charge is optimal (${(socNow * 100).toFixed(0)}%). Zero grid dependency.`;
-      }
-    } else if (loadNow > 180) {
-      if (batNow < -15) {
-        aiExplanation = `[Fuzzy Peak Shave]: Critical peak demand (${loadNow.toFixed(1)} kW). Fuzzy rules trigger battery discharge (-${Math.abs(batNow).toFixed(1)} kW), flattening grid draw to ${gridNow.toFixed(1)} kW (preventing a ${gridRb.toFixed(1)} kW baseline surge!).`;
-      } else {
-        aiExplanation = `[Fuzzy Balancer]: Evening load support. Preserving battery health within safe SoC limits.`;
-      }
-    } else {
-      aiExplanation = `[Fuzzy Steady State]: Off-peak balance. Grid tariff is low ($0.08/kWh). Managing battery throughput to minimize degradation wear.`;
-    }
-  }
-
   return (
     <div className="space-y-5">
-      {/* 1. Supabase Studio Simulation Mode Selector & Playback Bar */}
+      {/* 1. Supabase-style Algorithm Mode Selector & Playback Bar */}
       <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm space-y-4">
-        {/* Row 1: Algorithm Mode Selector */}
+        {/* Row 1: Algorithm Selector Tabs */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#262626] pb-3">
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-[#3ecf8e]" />
@@ -202,11 +198,8 @@ export default function LiveSimulator({
 
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
             <button
-              onClick={() => {
-                setSimMode('fde');
-                onHourChange(0);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border ${
+              onClick={() => setSimMode('fde')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
                 simMode === 'fde'
                   ? 'bg-[#14231b] text-[#3ecf8e] border-[#244b36] font-bold shadow-sm'
                   : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
@@ -218,11 +211,8 @@ export default function LiveSimulator({
 
             {pdeResult && (
               <button
-                onClick={() => {
-                  setSimMode('pde');
-                  onHourChange(0);
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border ${
+                onClick={() => setSimMode('pde')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
                   simMode === 'pde'
                     ? 'bg-[#1a1c2e] text-indigo-400 border-indigo-500/40 font-bold shadow-sm'
                     : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
@@ -235,47 +225,41 @@ export default function LiveSimulator({
 
             {rbResult && (
               <button
-                onClick={() => {
-                  setSimMode('rb');
-                  onHourChange(0);
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border ${
+                onClick={() => setSimMode('rb')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
                   simMode === 'rb'
                     ? 'bg-[#251829] text-purple-400 border-purple-500/40 font-bold shadow-sm'
                     : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
                 }`}
               >
                 <span className="w-2 h-2 rounded-full bg-purple-400"></span>
-                <span>Normal Heuristic / Greedy</span>
+                <span>Normal Heuristic Greedy</span>
               </button>
             )}
 
             {rbResult && (
               <button
-                onClick={() => {
-                  setSimMode('dual');
-                  onHourChange(0);
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border ${
+                onClick={() => setSimMode('dual')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
                   simMode === 'dual'
-                    ? 'bg-[#222] text-amber-300 border-amber-500/50 font-bold shadow-sm'
+                    ? 'bg-[#242416] text-amber-300 border-amber-500/50 font-bold shadow-sm'
                     : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
                 }`}
               >
                 <GitCompare className="w-3.5 h-3.5" />
-                <span>Dual Comparison (Overlay)</span>
+                <span>Head-to-Head Comparison</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Row 2: Playback Controls */}
+        {/* Row 2: Playback Controls & Timeline Scrubber */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full ${isPlaying ? 'bg-[#3ecf8e] animate-pulse' : 'bg-amber-400'}`}></span>
               <span className="text-sm font-semibold text-zinc-100 font-mono tracking-wide">
-                {isPlaying ? 'SIMULATION IN PROGRESS' : isSimulationComplete ? 'SIMULATION COMPLETE' : 'READY TO SIMULATE'}
+                {activeModeName}
               </span>
             </div>
 
@@ -286,6 +270,7 @@ export default function LiveSimulator({
           </div>
 
           <div className="flex items-center gap-2 text-xs font-mono">
+            {/* Play / Pause */}
             <button
               onClick={() => {
                 if (isSimulationComplete) {
@@ -309,27 +294,42 @@ export default function LiveSimulator({
               ) : isSimulationComplete ? (
                 <>
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Re-run Simulation</span>
+                  <span>Replay 24h</span>
                 </>
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Start 24h Run</span>
+                  <span>Play Simulation</span>
                 </>
               )}
             </button>
 
+            {/* Quick Full Day Reveal */}
+            <button
+              onClick={() => {
+                setIsPlaying(false);
+                onHourChange(N - 1);
+              }}
+              className="flex items-center gap-1 bg-[#222] hover:bg-[#282828] border border-[#333] text-zinc-200 px-3 py-2 rounded-md transition-colors cursor-pointer"
+              title="Show completed 24-hour graph"
+            >
+              <Eye className="w-3.5 h-3.5 text-[#3ecf8e]" />
+              <span>Show Full Day</span>
+            </button>
+
+            {/* Reset to 00:00 */}
             <button
               onClick={() => {
                 setIsPlaying(false);
                 onHourChange(0);
               }}
-              className="flex items-center gap-1 bg-[#222] hover:bg-[#282828] border border-[#333] text-zinc-300 px-3 py-2 rounded-md transition-colors cursor-pointer"
+              className="flex items-center gap-1 bg-[#222] hover:bg-[#282828] border border-[#333] text-zinc-400 hover:text-zinc-200 px-3 py-2 rounded-md transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset</span>
             </button>
 
+            {/* Speed Selector */}
             <div className="flex items-center bg-[#222] border border-[#333] rounded-md overflow-hidden">
               {[1, 2, 4].map((spd) => (
                 <button
@@ -345,10 +345,31 @@ export default function LiveSimulator({
             </div>
           </div>
         </div>
+
+        {/* Timeline Drag Scrubber Slider */}
+        <div className="space-y-1.5 pt-1">
+          <div className="flex justify-between text-[11px] font-mono text-zinc-400">
+            <span>00:00 (Start)</span>
+            <span className="text-[#3ecf8e] font-bold">Drag slider to scrub timeline: {hourLabel}</span>
+            <span>24:00 (End)</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max={N - 1}
+            value={t}
+            onChange={(e) => {
+              setIsPlaying(false);
+              onHourChange(Number(e.target.value));
+            }}
+            className="w-full accent-[#3ecf8e] bg-[#262626] h-2 rounded-lg cursor-pointer"
+          />
+        </div>
       </div>
 
       {/* 2. Microgrid Physical Flow Telemetry Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        {/* Solar PV */}
         <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
             <span className="flex items-center gap-1.5 text-amber-400 font-medium">
@@ -369,6 +390,7 @@ export default function LiveSimulator({
           </div>
         </div>
 
+        {/* Battery Storage */}
         <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
             <span className="flex items-center gap-1.5 text-cyan-400 font-medium">
@@ -397,6 +419,7 @@ export default function LiveSimulator({
           </div>
         </div>
 
+        {/* Microgrid Load */}
         <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
             <span className="flex items-center gap-1.5 text-zinc-200 font-medium">
@@ -417,10 +440,11 @@ export default function LiveSimulator({
           </div>
         </div>
 
+        {/* Utility Grid Connection */}
         <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
             <span className="flex items-center gap-1.5 text-orange-400 font-medium">
-              <Zap className="w-4 h-4" /> Grid Connection
+              <Zap className="w-4 h-4" /> Utility Grid Import
             </span>
             <span
               className={`text-[10px] px-1.5 py-0.2 rounded border font-mono ${
@@ -440,68 +464,92 @@ export default function LiveSimulator({
               <span className="text-xs text-zinc-400 ml-1 font-mono">kW</span>
             </div>
             {rbResult && simMode !== 'rb' && (
-              <span className="text-xs font-mono text-zinc-500 line-through">
-                {gridRb.toFixed(1)} kW
+              <span className="text-xs font-mono text-zinc-500 line-through" title="Greedy baseline draw">
+                {gridRbNow.toFixed(1)} kW
               </span>
             )}
           </div>
           <div className="text-xs font-mono text-[#3ecf8e]">
-            {simMode !== 'rb' && gridNow < gridRb ? `Shaved ${(gridRb - gridNow).toFixed(1)} kW` : 'Operating state'}
+            {simMode !== 'rb' && gridNow < gridRbNow ? `Shaved ${(gridRbNow - gridNow).toFixed(1)} kW` : 'Active state'}
           </div>
         </div>
       </div>
 
-      {/* 3. Progressive Drawing Canvas: Draws hour-by-hour up to hour t! */}
+      {/* 3. Progressive Drawing Canvas */}
       <div className="bg-[#171717] border border-[#262626] rounded-lg p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3 border-b border-[#262626] pb-3">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
-                Live Progressive Power Curve Drawing
+                {simMode === 'dual'
+                  ? 'Dual Comparison: Fuzzy+DE vs Baseline Grid Import Over Time'
+                  : `Live Progressive Power Curve: ${activeModeName}`}
               </h3>
               <span className="text-[10px] font-mono text-[#3ecf8e] bg-[#14231b] border border-[#244b36] px-2 py-0.5 rounded">
                 Plotting from 00:00 to {hourLabel}
               </span>
             </div>
             <p className="text-xs text-zinc-300 mt-0.5">
-              The graph reveals dynamically with time. Future hours stay masked until simulated.
+              {simMode === 'dual'
+                ? 'Solid Green = Proposed Fuzzy+DE | Dashed Red = Normal Greedy Baseline (Huge Peak Spikes!)'
+                : 'Curves reveal progressively as time advances. Scrub slider or press Play to simulate.'}
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs font-mono">
-            <button
-              onClick={() => setActiveSeries((s) => ({ ...s, solar: !s.solar }))}
-              className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
-                activeSeries.solar ? 'bg-[#221e14] border-amber-500/50 text-amber-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
-              }`}
-            >
-              Solar PV
-            </button>
-            <button
-              onClick={() => setActiveSeries((s) => ({ ...s, load: !s.load }))}
-              className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
-                activeSeries.load ? 'bg-[#202020] border-zinc-500/50 text-zinc-200' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
-              }`}
-            >
-              Load
-            </button>
-            <button
-              onClick={() => setActiveSeries((s) => ({ ...s, battery: !s.battery }))}
-              className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
-                activeSeries.battery ? 'bg-[#132228] border-cyan-500/50 text-cyan-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
-              }`}
-            >
-              Battery
-            </button>
-            <button
-              onClick={() => setActiveSeries((s) => ({ ...s, grid: !s.grid }))}
-              className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
-                activeSeries.grid ? 'bg-[#261c16] border-orange-500/50 text-orange-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
-              }`}
-            >
-              Grid Import
-            </button>
-          </div>
+          {/* Series Toggles or Legend */}
+          {simMode === 'dual' ? (
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#14231b] text-[#3ecf8e] border border-[#244b36]">
+                <span className="w-2 h-2 rounded-full bg-[#3ecf8e]"></span>
+                <span>Fuzzy + DE Import</span>
+              </span>
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#2b1618] text-red-400 border border-red-500/30">
+                <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                <span>Normal Greedy Import</span>
+              </span>
+              {pdeResult && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#1a1c2e] text-indigo-400 border border-indigo-500/30">
+                  <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                  <span>Plain DE</span>
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs font-mono">
+              <button
+                onClick={() => setActiveSeries((s) => ({ ...s, solar: !s.solar }))}
+                className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
+                  activeSeries.solar ? 'bg-[#221e14] border-amber-500/50 text-amber-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
+                }`}
+              >
+                Solar PV
+              </button>
+              <button
+                onClick={() => setActiveSeries((s) => ({ ...s, load: !s.load }))}
+                className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
+                  activeSeries.load ? 'bg-[#202020] border-zinc-500/50 text-zinc-200' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
+                }`}
+              >
+                Load
+              </button>
+              <button
+                onClick={() => setActiveSeries((s) => ({ ...s, battery: !s.battery }))}
+                className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
+                  activeSeries.battery ? 'bg-[#132228] border-cyan-500/50 text-cyan-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
+                }`}
+              >
+                Battery
+              </button>
+              <button
+                onClick={() => setActiveSeries((s) => ({ ...s, grid: !s.grid }))}
+                className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
+                  activeSeries.grid ? 'bg-[#261c16] border-orange-500/50 text-orange-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
+                }`}
+              >
+                Grid Import
+              </button>
+            </div>
+          )}
         </div>
 
         {/* SVG Drawing Canvas */}
@@ -511,6 +559,10 @@ export default function LiveSimulator({
               <linearGradient id="liveSolarGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
                 <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+              </linearGradient>
+              <linearGradient id="fdeGridGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#3ecf8e" stopOpacity="0.2" />
+                <stop offset="100%" stopColor="#3ecf8e" stopOpacity="0.0" />
               </linearGradient>
             </defs>
 
@@ -580,71 +632,119 @@ export default function LiveSimulator({
               />
             )}
 
-            {/* Trace 1: Solar (Drawn up to hour t!) */}
-            {activeSeries.solar && solarPoints.length > 0 && (
+            {/* DUAL COMPARISON MODE RENDERING */}
+            {simMode === 'dual' ? (
               <g pointerEvents="none">
-                <path
-                  d={`${getMonotonePath(solarPoints)} L ${currentX} ${yZero} L ${scaleX(0)} ${yZero} Z`}
-                  fill="url(#liveSolarGrad)"
-                />
+                {/* Solar PV (Subtle reference) */}
                 <path
                   d={getMonotonePath(solarPoints)}
                   fill="none"
                   stroke="#f59e0b"
-                  strokeWidth="2.5"
+                  strokeWidth="1.8"
+                  opacity="0.4"
+                />
+
+                {/* Microgrid Load (Subtle reference) */}
+                <path
+                  d={getMonotonePath(loadPoints)}
+                  fill="none"
+                  stroke="#a1a1aa"
+                  strokeWidth="1.8"
+                  strokeDasharray="4 3"
+                  opacity="0.4"
+                />
+
+                {/* Baseline Normal Greedy Grid Import (Red dashed spike!) */}
+                {rbGridPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(rbGridPoints)}
+                    fill="none"
+                    stroke="#f43f5e"
+                    strokeWidth="2.8"
+                    strokeDasharray="6 3"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                {/* Plain DE Grid Import (Indigo dashed) */}
+                {pdeGridPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(pdeGridPoints)}
+                    fill="none"
+                    stroke="#818cf8"
+                    strokeWidth="2.0"
+                    strokeDasharray="4 2"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                {/* Proposed Fuzzy + DE Grid Import (Solid Mint Green #3ecf8e!) */}
+                <path
+                  d={`${getMonotonePath(fdeGridPoints)} L ${currentX} ${yZero} L ${scaleX(0)} ${yZero} Z`}
+                  fill="url(#fdeGridGrad)"
+                />
+                <path
+                  d={getMonotonePath(fdeGridPoints)}
+                  fill="none"
+                  stroke="#3ecf8e"
+                  strokeWidth="3.0"
                   strokeLinecap="round"
                 />
               </g>
-            )}
+            ) : (
+              /* SINGLE ALGORITHM MODE RENDERING (fde / pde / rb) */
+              <g pointerEvents="none">
+                {/* Trace 1: Solar */}
+                {activeSeries.solar && solarPoints.length > 0 && (
+                  <g>
+                    <path
+                      d={`${getMonotonePath(solarPoints)} L ${currentX} ${yZero} L ${scaleX(0)} ${yZero} Z`}
+                      fill="url(#liveSolarGrad)"
+                    />
+                    <path
+                      d={getMonotonePath(solarPoints)}
+                      fill="none"
+                      stroke="#f59e0b"
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                    />
+                  </g>
+                )}
 
-            {/* Trace 2: Load (Drawn up to hour t!) */}
-            {activeSeries.load && loadPoints.length > 0 && (
-              <path
-                pointerEvents="none"
-                d={getMonotonePath(loadPoints)}
-                fill="none"
-                stroke="#a1a1aa"
-                strokeWidth="2.2"
-                strokeDasharray="4 3"
-                strokeLinecap="round"
-              />
-            )}
+                {/* Trace 2: Load */}
+                {activeSeries.load && loadPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(loadPoints)}
+                    fill="none"
+                    stroke="#a1a1aa"
+                    strokeWidth="2.2"
+                    strokeDasharray="4 3"
+                    strokeLinecap="round"
+                  />
+                )}
 
-            {/* Trace 3: Battery (Drawn up to hour t!) */}
-            {activeSeries.battery && batteryPoints.length > 0 && (
-              <path
-                pointerEvents="none"
-                d={getMonotonePath(batteryPoints)}
-                fill="none"
-                stroke="#06b6d4"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-              />
-            )}
+                {/* Trace 3: Battery */}
+                {activeSeries.battery && batteryPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(batteryPoints)}
+                    fill="none"
+                    stroke="#06b6d4"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                  />
+                )}
 
-            {/* Trace 4: Grid Import (Drawn up to hour t!) */}
-            {activeSeries.grid && gridPoints.length > 0 && (
-              <path
-                pointerEvents="none"
-                d={getMonotonePath(gridPoints)}
-                fill="none"
-                stroke="#f97316"
-                strokeWidth="2.8"
-                strokeLinecap="round"
-              />
-            )}
-
-            {/* Dual Comparison: Unoptimized Baseline Curve Overlay */}
-            {simMode === 'dual' && rbGridPoints.length > 0 && (
-              <path
-                pointerEvents="none"
-                d={getMonotonePath(rbGridPoints)}
-                fill="none"
-                stroke="#f43f5e"
-                strokeWidth="2.0"
-                strokeDasharray="5 3"
-                strokeLinecap="round"
-              />
+                {/* Trace 4: Grid Import */}
+                {activeSeries.grid && gridPoints.length > 0 && (
+                  <path
+                    d={getMonotonePath(gridPoints)}
+                    fill="none"
+                    stroke={simMode === 'rb' ? '#c084fc' : simMode === 'pde' ? '#818cf8' : '#f97316'}
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                  />
+                )}
+              </g>
             )}
 
             {/* Live Front Needle / Cursor */}
@@ -657,7 +757,7 @@ export default function LiveSimulator({
               stroke="#3ecf8e"
               strokeWidth="2"
             />
-            {/* Safe point marker at current head */}
+            {/* Safe marker at current head */}
             <circle
               pointerEvents="none"
               cx={currentX}
@@ -687,7 +787,7 @@ export default function LiveSimulator({
               <div className="flex justify-between">
                 <span className="text-zinc-400">Current Grid Import:</span>
                 <span className="font-bold text-zinc-100 tabular-nums">
-                  {fdeResult.grid_import_kw ? Number(fdeResult.grid_import_kw[t]).toFixed(1) : 0} kW
+                  {gridFdeNow.toFixed(1)} kW
                 </span>
               </div>
               <div className="flex justify-between">
@@ -705,12 +805,12 @@ export default function LiveSimulator({
 
           <div className="bg-[#141414] border border-[#2a2a2a] rounded-lg p-3.5">
             <div className="text-zinc-400 text-[10px] uppercase font-semibold">
-              Normal Heuristic / Greedy
+              Normal Heuristic Greedy
             </div>
             <div className="mt-2 space-y-1">
               <div className="flex justify-between">
                 <span className="text-zinc-400">Current Grid Import:</span>
-                <span className="font-bold text-zinc-300 tabular-nums">{gridRb.toFixed(1)} kW</span>
+                <span className="font-bold text-zinc-300 tabular-nums">{gridRbNow.toFixed(1)} kW</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-400">Peak Spike So Far:</span>
@@ -718,7 +818,7 @@ export default function LiveSimulator({
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-400">Battery Status:</span>
-                <span className="text-zinc-400 tabular-nums">{(socRb * 100).toFixed(0)}% SoC</span>
+                <span className="text-zinc-400 tabular-nums">{(socRbNow * 100).toFixed(0)}% SoC</span>
               </div>
             </div>
           </div>
@@ -741,12 +841,6 @@ export default function LiveSimulator({
             </div>
           </div>
         </div>
-
-        {/* Live AI Commentary */}
-        <div className="mt-3 pt-3 border-t border-[#262626] flex items-center gap-2 text-xs font-mono">
-          <span className="text-[#3ecf8e] font-bold shrink-0">[ENGINE STATUS]:</span>
-          <span className="text-zinc-200">{aiExplanation}</span>
-        </div>
       </div>
 
       {/* 5. Simulation Complete Report Card */}
@@ -761,7 +855,7 @@ export default function LiveSimulator({
                 24-Hour Microgrid Simulation Complete!
               </h3>
               <p className="text-xs text-zinc-300">
-                The simulated run finished successfully across the complete 24-hour cycle.
+                The run finished successfully across the complete 24-hour cycle.
               </p>
             </div>
           </div>
