@@ -6,6 +6,7 @@ import DispatchChart from './components/DispatchChart';
 import ConvergenceChart from './components/ConvergenceChart';
 import FuzzyInspector from './components/FuzzyInspector';
 import BenchmarkTable from './components/BenchmarkTable';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Play, BarChart3, Cpu, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -168,8 +169,9 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. Main Multi-Page Content Area */}
-      <main className="flex-1 p-6 bg-supabase-grid">
+      {/* 3. Main Multi-Page Content Area with Error Boundary */}
+      <ErrorBoundary>
+        <main className="flex-1 p-6 bg-supabase-grid">
         {/* PAGE 1: INTERACTIVE LIVE SIMULATOR */}
         {activeTab === 'simulator' && (
           <div className="max-w-6xl mx-auto">
@@ -245,10 +247,10 @@ export default function App() {
                 </h4>
                 <div className="space-y-2 text-zinc-300 leading-relaxed">
                   <p>
-                    <b className="text-[#3ecf8e]">1. Mamdani FIS:</b> Evaluates 3 inputs (Renewable, Battery SoC, Grid Pressure) through 27 triangular/trapezoidal rules, defuzzifying to compute $W_{grid}$ ($0.5-3.0$), $B_{bias}$ ($-1.0$ to $+1.0$), and $W_{peak}$ ($1.0-5.0$).
+                    <b className="text-[#3ecf8e]">1. Mamdani FIS:</b> Evaluates 3 inputs (Renewable, Battery SoC, Grid Pressure) through 27 triangular/trapezoidal rules, defuzzifying to compute W_grid (0.5 to 3.0), B_bias (-1.0 to +1.0), and W_peak (1.0 to 5.0).
                   </p>
                   <p>
-                    <b className="text-indigo-400">2. Differential Evolution:</b> Vectorized `DE/best/1/bin` mutation with ramp-rate limiting ($\Delta P \le 45\text{ kW}$) and inter-step continuity constraints to eliminate high-frequency switching.
+                    <b className="text-indigo-400">2. Differential Evolution:</b> Vectorized DE/best/1/bin mutation with inverter ramp-rate limiting (&Delta;P &le; 45 kW) and inter-step continuity constraints to eliminate high-frequency switching.
                   </p>
                   <p>
                     <b className="text-amber-400">3. Hybrid Advantage:</b> Reshapes the non-linear fitness landscape, reducing peak grid import by up to 17.4% over standard Plain DE.
@@ -271,6 +273,7 @@ export default function App() {
           </div>
         )}
       </main>
+      </ErrorBoundary>
     </div>
   );
 }
