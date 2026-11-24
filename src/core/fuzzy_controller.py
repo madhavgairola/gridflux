@@ -32,14 +32,14 @@ def trimf(x: float | np.ndarray, params: Tuple[float, float, float]) -> float | 
         y[x == b] = 1.0
         return y
     else:
-        if x <= a or x >= c:
-            return 0.0
-        elif x == b:
+        if x == b:
             return 1.0
+        elif x <= a or x >= c:
+            return 0.0
         elif a < x < b:
-            return (x - a) / (b - a)
+            return (x - a) / (b - a) if b > a else 1.0
         else:
-            return (c - x) / (c - b)
+            return (c - x) / (c - b) if c > b else 1.0
 
 
 def trapmf(x: float | np.ndarray, params: Tuple[float, float, float, float]) -> float | np.ndarray:
@@ -57,14 +57,14 @@ def trapmf(x: float | np.ndarray, params: Tuple[float, float, float, float]) -> 
             y[idx3] = (d - x[idx3]) / (d - c)
         return y
     else:
-        if x <= a or x >= d:
-            return 0.0
-        elif b <= x <= c:
+        if b <= x <= c:
             return 1.0
+        elif x <= a or x >= d:
+            return 0.0
         elif a < x < b:
-            return (x - a) / (b - a)
+            return (x - a) / (b - a) if b > a else 1.0
         else:
-            return (d - x) / (d - c)
+            return (d - x) / (d - c) if d > c else 1.0
 
 
 class FuzzyDispatchController:

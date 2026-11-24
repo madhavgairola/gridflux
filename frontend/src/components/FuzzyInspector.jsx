@@ -1,17 +1,78 @@
-import React from 'react';
-import { Cpu } from 'lucide-react';
+import React, { useState } from 'react';
+import { Cpu, Clock, Sliders } from 'lucide-react';
 
 export default function FuzzyInspector({
   fuzzyExplainability,
   selectedHourIndex,
+  onHourChange,
   timeLabels
 }) {
-  if (!fuzzyExplainability || !fuzzyExplainability.step_details) return null;
+  const steps = fuzzyExplainability && Array.isArray(fuzzyExplainability.step_details)
+    ? fuzzyExplainability.step_details
+    : [];
 
-  const currentStep = fuzzyExplainability.step_details[selectedHourIndex] || fuzzyExplainability.step_details[0];
-  const hourLabel = timeLabels[selectedHourIndex] || '00:00';
+  const labels = Array.isArray(timeLabels) && timeLabels.length > 0
+    ? timeLabels
+    : Array.from({ length: Math.max(1, steps.length) }, (_, i) => `${String(i).padStart(2, '0')}:00`);
 
-  const { memberships, active_rules_count, top_rules, grid_penalty, battery_bias, peak_shaving_weight } = currentStep;
+  const [localHour, setLocalHour] = useState(
+    typeof selectedHourIndex === 'number' && selectedHourIndex >= 0 && selectedHourIndex < labels.length
+      ? selectedHourIndex
+      : 0
+  );
+
+  const activeHour = typeof selectedHourIndex === 'number' && selectedHourIndex >= 0 && selectedHourIndex < labels.length
+    ? selectedHourIndex
+    : localHour;
+
+  if (steps.length === 0) {
+    return (
+      <div className="flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg p-8 min-h-[300px]">
+        <span className="text-xs font-mono text-zinc-500">
+          Fuzzy inference explainability data unavailable. Run optimization to evaluate rules.
+        </span>
+      </div>
+    );
+  }
+
+  const safeIdx = Math.max(0, Math.min(activeHour, steps.length - 1));
+  const currentStep = steps[safeIdx] || steps[0] || {};
+  const hourLabel = labels[safeIdx] || `${String(safeIdx).padStart(2, '0')}:00`;
+
+  const memberships = currentStep.memberships || {
+    renewable: { L: 0, M: 0, H: 0 },
+    soc: { L: 0, M: 0, H: 0 },
+    demand_pressure: { L: 0, M: 0, H: 0 }
+  };
+
+  const renL = Number(memberships.renewable?.L) || 0;
+  const renM = Number(memberships.renewable?.M) || 0;
+  const renH = Number(memberships.renewable?.H) || 0;
+
+  const socL = Number(memberships.soc?.L) || 0;
+  const socM = Number(memberships.soc?.M) || 0;
+  const socH = Number(memberships.soc?.H) || 0;
+
+  const demL = Number(memberships.demand_pressure?.L) || 0;
+  const demM = Number(memberships.demand_pressure?.M) || 0;
+  const demH = Number(memberships.demand_pressure?.H) || 0;
+
+  const active_rules_count = typeof currentStep.active_rules_count === 'number'
+    ? currentStep.active_rules_count
+    : (currentStep.top_rules?.length || 0);
+
+  const top_rules = Array.isArray(currentStep.top_rules) ? currentStep.top_rules : [];
+
+  const grid_penalty = typeof currentStep.grid_penalty === 'number' ? currentStep.grid_penalty : 1.0;
+  const battery_bias = typeof currentStep.battery_bias === 'number' ? currentStep.battery_bias : 0.0;
+  const peak_shaving_weight = typeof currentStep.peak_shaving_weight === 'number' ? currentStep.peak_shaving_weight : 1.0;
+
+  const handleHourScrub = (h) => {
+    setLocalHour(h);
+    if (onHourChange) {
+      onHourChange(h);
+    }
+  };
 
   return (
     <div className="flex flex-col bg-[#171717] border border-[#262626] rounded-lg shadow-sm">
@@ -23,12 +84,34 @@ export default function FuzzyInspector({
             Fuzzy Inference Inspector
           </h3>
         </div>
-        <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-[#202020] border border-[#2f2f2f] text-cyan-400">
-          T = {hourLabel}
-        </span>
+        <div className="flex items-center gap-2 font-mono text-xs">
+          <Clock className="w-3.5 h-3.5 text-[#3ecf8e]" />
+          <span className="font-semibold text-zinc-200 bg-[#202020] border border-[#2f2f2f] px-2 py-0.5 rounded">
+            {hourLabel}
+          </span>
+        </div>
       </div>
 
       <div className="p-4 space-y-3.5">
+        {/* Hour Timeline Scrubber inside Inspector */}
+        <div className="bg-[#141414] border border-[#262626] rounded-md p-2.5 space-y-1 font-mono text-xs">
+          <div className="flex items-center justify-between text-[11px] text-zinc-400">
+            <span className="flex items-center gap-1 text-zinc-300">
+              <Sliders className="w-3 h-3 text-[#3ecf8e]" />
+              <span>Inspect Time-Step:</span>
+            </span>
+            <span className="text-[#3ecf8e] font-bold">{hourLabel}</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max={steps.length - 1}
+            value={safeIdx}
+            onChange={(e) => handleHourScrub(Number(e.target.value))}
+            className="w-full accent-[#3ecf8e] bg-[#242424] h-1.5 rounded cursor-pointer"
+          />
+        </div>
+
         {/* 1. Defuzzified Guidance Outputs */}
         <div className="grid grid-cols-3 gap-2">
           <div className="bg-[#121212] border border-[#262626] rounded-md p-2 text-center">
@@ -45,7 +128,7 @@ export default function FuzzyInspector({
               {battery_bias > 0 ? `+${battery_bias.toFixed(2)}` : battery_bias.toFixed(2)}
             </div>
             <div className="text-[9px] text-zinc-500 font-mono">
-              {battery_bias > 0.1 ? 'Charge' : battery_bias < -0.1 ? 'Discharge' : 'Float'}
+              {battery_bias > 0.05 ? 'Charge' : battery_bias < -0.05 ? 'Discharge' : 'Float'}
             </div>
           </div>
 
@@ -69,13 +152,13 @@ export default function FuzzyInspector({
             <div className="flex justify-between text-[11px] mb-1">
               <span className="text-amber-400">Solar PV:</span>
               <span className="text-zinc-300">
-                L: {memberships.renewable.L} | M: {memberships.renewable.M} | H: {memberships.renewable.H}
+                L: {renL.toFixed(2)} | M: {renM.toFixed(2)} | H: {renH.toFixed(2)}
               </span>
             </div>
             <div className="flex h-1.5 w-full rounded bg-[#242424] overflow-hidden">
-              <div style={{ width: `${memberships.renewable.L * 100}%` }} className="bg-zinc-600"></div>
-              <div style={{ width: `${memberships.renewable.M * 100}%` }} className="bg-amber-500"></div>
-              <div style={{ width: `${memberships.renewable.H * 100}%` }} className="bg-amber-300"></div>
+              <div style={{ width: `${Math.min(100, renL * 100)}%` }} className="bg-zinc-600"></div>
+              <div style={{ width: `${Math.min(100, renM * 100)}%` }} className="bg-amber-500"></div>
+              <div style={{ width: `${Math.min(100, renH * 100)}%` }} className="bg-amber-300"></div>
             </div>
           </div>
 
@@ -84,13 +167,13 @@ export default function FuzzyInspector({
             <div className="flex justify-between text-[11px] mb-1">
               <span className="text-cyan-400">Battery SoC:</span>
               <span className="text-zinc-300">
-                L: {memberships.soc.L} | M: {memberships.soc.M} | H: {memberships.soc.H}
+                L: {socL.toFixed(2)} | M: {socM.toFixed(2)} | H: {socH.toFixed(2)}
               </span>
             </div>
             <div className="flex h-1.5 w-full rounded bg-[#242424] overflow-hidden">
-              <div style={{ width: `${memberships.soc.L * 100}%` }} className="bg-red-500"></div>
-              <div style={{ width: `${memberships.soc.M * 100}%` }} className="bg-cyan-400"></div>
-              <div style={{ width: `${memberships.soc.H * 100}%` }} className="bg-[#3ecf8e]"></div>
+              <div style={{ width: `${Math.min(100, socL * 100)}%` }} className="bg-red-500"></div>
+              <div style={{ width: `${Math.min(100, socM * 100)}%` }} className="bg-cyan-400"></div>
+              <div style={{ width: `${Math.min(100, socH * 100)}%` }} className="bg-[#3ecf8e]"></div>
             </div>
           </div>
 
@@ -99,13 +182,13 @@ export default function FuzzyInspector({
             <div className="flex justify-between text-[11px] mb-1">
               <span className="text-orange-400">Demand Stress:</span>
               <span className="text-zinc-300">
-                L: {memberships.demand_pressure.L} | M: {memberships.demand_pressure.M} | H: {memberships.demand_pressure.H}
+                L: {demL.toFixed(2)} | M: {demM.toFixed(2)} | H: {demH.toFixed(2)}
               </span>
             </div>
             <div className="flex h-1.5 w-full rounded bg-[#242424] overflow-hidden">
-              <div style={{ width: `${memberships.demand_pressure.L * 100}%` }} className="bg-[#3ecf8e]"></div>
-              <div style={{ width: `${memberships.demand_pressure.M * 100}%` }} className="bg-amber-500"></div>
-              <div style={{ width: `${memberships.demand_pressure.H * 100}%` }} className="bg-red-500"></div>
+              <div style={{ width: `${Math.min(100, demL * 100)}%` }} className="bg-[#3ecf8e]"></div>
+              <div style={{ width: `${Math.min(100, demM * 100)}%` }} className="bg-amber-500"></div>
+              <div style={{ width: `${Math.min(100, demH * 100)}%` }} className="bg-red-500"></div>
             </div>
           </div>
         </div>
@@ -118,19 +201,25 @@ export default function FuzzyInspector({
           </div>
 
           <div className="space-y-1.5 overflow-y-auto max-h-[175px] pr-1">
-            {top_rules.map((rule, idx) => (
-              <div
-                key={idx}
-                className="bg-[#121212] border border-[#262626] rounded p-2 text-[11px] font-mono flex items-start justify-between gap-2"
-              >
-                <div className="flex-1 text-zinc-300 leading-tight">
-                  {rule.description}
-                </div>
-                <span className="font-bold text-[#3ecf8e] bg-[#14231b] border border-[#244b36] px-1.5 py-0.2 rounded text-[10px] tabular-nums shrink-0">
-                  w = {rule.strength.toFixed(3)}
-                </span>
+            {top_rules.length === 0 ? (
+              <div className="bg-[#121212] border border-[#262626] rounded p-2.5 text-[11px] font-mono text-zinc-500 text-center">
+                Operating in balanced default state.
               </div>
-            ))}
+            ) : (
+              top_rules.map((rule, idx) => (
+                <div
+                  key={idx}
+                  className="bg-[#121212] border border-[#262626] rounded p-2 text-[11px] font-mono flex items-start justify-between gap-2"
+                >
+                  <div className="flex-1 text-zinc-300 leading-tight">
+                    {rule.description || `Rule ${idx + 1}`}
+                  </div>
+                  <span className="font-bold text-[#3ecf8e] bg-[#14231b] border border-[#244b36] px-1.5 py-0.2 rounded text-[10px] tabular-nums shrink-0">
+                    w = {(typeof rule.strength === 'number' ? rule.strength : 0).toFixed(3)}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

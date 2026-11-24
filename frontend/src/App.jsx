@@ -263,6 +263,7 @@ export default function App() {
                 <FuzzyInspector
                   fuzzyExplainability={optimizationData.fuzzy_explainability}
                   selectedHourIndex={simulatedHourIdx}
+                  onHourChange={setSimulatedHourIdx}
                   timeLabels={timeLabels}
                 />
               )}
