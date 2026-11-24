@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Sun, Battery, Zap, Building2, CheckCircle2, Award, Clock, GitCompare, Layers, Eye } from 'lucide-react';
+import { Play, Pause, RotateCcw, Sun, Battery, Zap, Building2, CheckCircle2, Clock, GitCompare, Layers, Eye } from 'lucide-react';
 
 // Safe Monotone-clamped cubic spline for progressive curves
 function getMonotonePath(points) {
@@ -948,39 +948,6 @@ export default function LiveSimulator({
         </div>
       </div>
 
-      {/* 5. Simulation Complete Report Card */}
-      {isSimulationComplete && (
-        <div className="bg-[#14231b] border border-[#244b36] rounded-lg p-5 shadow-lg flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#1b3a29] border border-[#3ecf8e] flex items-center justify-center text-[#3ecf8e]">
-              <Award className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-zinc-100">
-                24-Hour Microgrid Simulation Complete!
-              </h3>
-              <p className="text-xs text-zinc-300">
-                The run finished successfully across the complete 24-hour cycle.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6 font-mono text-xs">
-            <div>
-              <div className="text-zinc-400 text-[10px]">TOTAL SAVINGS</div>
-              <div className="text-lg font-bold text-[#3ecf8e]">+${liveSavedDollars.toFixed(2)}</div>
-            </div>
-            <div>
-              <div className="text-zinc-400 text-[10px]">PEAK POWER SHAVED</div>
-              <div className="text-lg font-bold text-[#3ecf8e]">-{liveShavedKw.toFixed(1)} kW</div>
-            </div>
-            <div>
-              <div className="text-zinc-400 text-[10px]">SOLAR SELF-USE</div>
-              <div className="text-lg font-bold text-amber-400">{activeDataset.renewable_utilization_pct.toFixed(1)}%</div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

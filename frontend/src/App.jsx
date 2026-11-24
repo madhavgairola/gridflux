@@ -271,20 +271,6 @@ export default function App() {
           </div>
         )}
       </main>
-
-      {/* Supabase Footer */}
-      <footer className="border-t border-[#262626] bg-[#141414] px-6 py-2.5 text-[11px] font-mono text-zinc-500 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="text-zinc-300 font-medium">GridFlux v1.4.0</span>
-          <span>•</span>
-          <span>Mamdani FIS + DE/best/1/bin</span>
-          <span>•</span>
-          <span className="text-[#3ecf8e]">Multi-Mode Simulation Active</span>
-        </div>
-        <div>
-          Course 26B16CS311: Fundamentals of Soft Computing • CO4 System
-        </div>
-      </footer>
     </div>
   );
 }
