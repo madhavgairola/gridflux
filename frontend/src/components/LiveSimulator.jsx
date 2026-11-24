@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Sun, Battery, Zap, Building2, CheckCircle2, Clock, GitCompare, Layers, Eye } from 'lucide-react';
+import { Play, Pause, RotateCcw, Sun, Battery, BatteryCharging, Zap, Building2, CheckCircle2, Clock, GitCompare, Layers, Eye, Activity } from 'lucide-react';
+import PillBadge from './PillBadge';
 
 // Safe Monotone-clamped cubic spline for progressive curves
 function getMonotonePath(points) {
@@ -226,7 +227,7 @@ export default function LiveSimulator({
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
             <button
               onClick={() => handleSelectMode('fde')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all border cursor-pointer ${
                 simMode === 'fde'
                   ? 'bg-[#14231b] text-[#3ecf8e] border-[#244b36] font-bold shadow-sm'
                   : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
@@ -239,7 +240,7 @@ export default function LiveSimulator({
             {pdeResult && (
               <button
                 onClick={() => handleSelectMode('pde')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all border cursor-pointer ${
                   simMode === 'pde'
                     ? 'bg-[#1a1c2e] text-indigo-400 border-indigo-500/40 font-bold shadow-sm'
                     : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
@@ -253,7 +254,7 @@ export default function LiveSimulator({
             {rbResult && (
               <button
                 onClick={() => handleSelectMode('rb')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all border cursor-pointer ${
                   simMode === 'rb'
                     ? 'bg-[#251829] text-purple-400 border-purple-500/40 font-bold shadow-sm'
                     : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
@@ -267,13 +268,13 @@ export default function LiveSimulator({
             {rbResult && (
               <button
                 onClick={() => handleSelectMode('dual')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all border cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all border cursor-pointer ${
                   simMode === 'dual'
                     ? 'bg-[#242416] text-amber-300 border-amber-500/50 font-bold shadow-sm'
                     : 'bg-[#1f1f1f] text-zinc-400 border-transparent hover:text-zinc-200'
                 }`}
               >
-                <GitCompare className="w-3.5 h-3.5" />
+                <GitCompare className="w-3.5 h-3.5 text-amber-400" />
                 <span>Head-to-Head Comparison</span>
               </button>
             )}
@@ -376,9 +377,12 @@ export default function LiveSimulator({
             <span className="flex items-center gap-1.5 text-amber-400 font-medium">
               <Sun className="w-4 h-4" /> Solar PV Array
             </span>
-            <span className="text-[10px] bg-[#221e14] text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded">
-              {solarNow > 10 ? 'Generating' : 'Dark'}
-            </span>
+            <PillBadge
+              icon={Sun}
+              label={solarNow > 10 ? 'Generating' : 'Dark'}
+              variant={solarNow > 10 ? 'amber' : 'neutral'}
+              size="sm"
+            />
           </div>
           <div className="my-2">
             <span className="text-3xl font-bold font-mono text-zinc-100 tabular-nums">
@@ -397,9 +401,12 @@ export default function LiveSimulator({
             <span className="flex items-center gap-1.5 text-cyan-400 font-medium">
               <Battery className="w-4 h-4" /> Battery Storage
             </span>
-            <span className="text-[10px] bg-[#14231b] text-[#3ecf8e] border border-[#244b36] px-1.5 py-0.2 rounded font-mono">
-              {batNow > 5 ? 'Charging' : batNow < -5 ? 'Discharging' : 'Float'}
-            </span>
+            <PillBadge
+              icon={batNow > 5 ? BatteryCharging : Battery}
+              label={batNow > 5 ? 'Charging' : batNow < -5 ? 'Discharging' : 'Float'}
+              variant={batNow > 5 ? 'emerald' : batNow < -5 ? 'cyan' : 'neutral'}
+              size="sm"
+            />
           </div>
           <div className="my-2 flex items-baseline justify-between">
             <div>
@@ -426,9 +433,12 @@ export default function LiveSimulator({
             <span className="flex items-center gap-1.5 text-zinc-200 font-medium">
               <Building2 className="w-4 h-4" /> Microgrid Load
             </span>
-            <span className="text-[10px] bg-[#222] text-zinc-400 border border-[#333] px-1.5 py-0.2 rounded">
-              Demand
-            </span>
+            <PillBadge
+              icon={Activity}
+              label="Demand"
+              variant="neutral"
+              size="sm"
+            />
           </div>
           <div className="my-2">
             <span className="text-3xl font-bold font-mono text-zinc-100 tabular-nums">
@@ -447,15 +457,12 @@ export default function LiveSimulator({
             <span className="flex items-center gap-1.5 text-orange-400 font-medium">
               <Zap className="w-4 h-4" /> Utility Grid Import
             </span>
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded border font-mono ${
-                gridNow <= 5
-                  ? 'bg-[#14231b] text-[#3ecf8e] border-[#244b36]'
-                  : 'bg-[#261c16] text-orange-400 border-orange-500/30'
-              }`}
-            >
-              {gridNow <= 5 ? 'Zero Draw' : 'Importing'}
-            </span>
+            <PillBadge
+              icon={gridNow <= 5 ? CheckCircle2 : Zap}
+              label={gridNow <= 5 ? 'Zero Draw' : 'Importing'}
+              variant={gridNow <= 5 ? 'emerald' : 'orange'}
+              size="sm"
+            />
           </div>
           <div className="my-2 flex items-baseline justify-between">
             <div>
@@ -519,32 +526,32 @@ export default function LiveSimulator({
             <div className="flex items-center gap-1.5 text-xs font-mono">
               <button
                 onClick={() => setActiveSeries((s) => ({ ...s, solar: !s.solar }))}
-                className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
-                  activeSeries.solar ? 'bg-[#221e14] border-amber-500/50 text-amber-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
+                className={`px-3 py-1 rounded-full text-xs border cursor-pointer transition-colors ${
+                  activeSeries.solar ? 'bg-[#221e14] border-amber-500/50 text-amber-400 font-medium' : 'bg-[#1f1f1f] text-zinc-500 border-transparent hover:text-zinc-300'
                 }`}
               >
                 Solar PV
               </button>
               <button
                 onClick={() => setActiveSeries((s) => ({ ...s, load: !s.load }))}
-                className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
-                  activeSeries.load ? 'bg-[#202020] border-zinc-500/50 text-zinc-200' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
+                className={`px-3 py-1 rounded-full text-xs border cursor-pointer transition-colors ${
+                  activeSeries.load ? 'bg-[#202020] border-zinc-500/50 text-zinc-200 font-medium' : 'bg-[#1f1f1f] text-zinc-500 border-transparent hover:text-zinc-300'
                 }`}
               >
                 Load
               </button>
               <button
                 onClick={() => setActiveSeries((s) => ({ ...s, battery: !s.battery }))}
-                className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
-                  activeSeries.battery ? 'bg-[#132228] border-cyan-500/50 text-cyan-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
+                className={`px-3 py-1 rounded-full text-xs border cursor-pointer transition-colors ${
+                  activeSeries.battery ? 'bg-[#132228] border-cyan-500/50 text-cyan-400 font-medium' : 'bg-[#1f1f1f] text-zinc-500 border-transparent hover:text-zinc-300'
                 }`}
               >
                 Battery
               </button>
               <button
                 onClick={() => setActiveSeries((s) => ({ ...s, grid: !s.grid }))}
-                className={`px-2.5 py-1 rounded text-xs border cursor-pointer ${
-                  activeSeries.grid ? 'bg-[#261c16] border-orange-500/50 text-orange-400' : 'bg-[#1f1f1f] text-zinc-500 border-transparent'
+                className={`px-3 py-1 rounded-full text-xs border cursor-pointer transition-colors ${
+                  activeSeries.grid ? 'bg-[#261c16] border-orange-500/50 text-orange-400 font-medium' : 'bg-[#1f1f1f] text-zinc-500 border-transparent hover:text-zinc-300'
                 }`}
               >
                 Grid Import

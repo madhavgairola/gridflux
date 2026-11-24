@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Layers, GitCompare } from 'lucide-react';
+import { Layers, GitCompare, Activity } from 'lucide-react';
+import PillBadge from './PillBadge';
 
 // Monotone-clamped cubic spline interpolation
 function getSmoothSplinePath(points) {
@@ -157,9 +158,7 @@ export default function DispatchChart({
             <h2 className="text-sm font-semibold text-zinc-100 tracking-tight">
               24-Hour Microgrid Power Allocation
             </h2>
-            <span className="text-[10px] font-mono uppercase bg-[#242424] text-zinc-400 border border-[#333] px-1.5 py-0.5 rounded">
-              Telemetry & Dispatch
-            </span>
+            <PillBadge icon={Activity} label="Telemetry & Dispatch" variant="neutral" size="sm" />
           </div>
           <p className="text-xs text-zinc-300 mt-0.5">
             Hover across the chart to inspect time-step physics, battery buffering, and grid import
@@ -170,7 +169,7 @@ export default function DispatchChart({
         <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
           <button
             onClick={() => setChartMode('fde')}
-            className={`px-2.5 py-1 rounded transition-all border cursor-pointer ${
+            className={`px-3 py-1 rounded-full transition-all border cursor-pointer ${
               chartMode === 'fde'
                 ? 'bg-[#14231b] text-[#3ecf8e] border-[#244b36] font-semibold'
                 : 'bg-[#1e1e1e] border-transparent text-zinc-400 hover:text-zinc-200'
@@ -182,7 +181,7 @@ export default function DispatchChart({
           {pdeResult && (
             <button
               onClick={() => setChartMode('pde')}
-              className={`px-2.5 py-1 rounded transition-all border cursor-pointer ${
+              className={`px-3 py-1 rounded-full transition-all border cursor-pointer ${
                 chartMode === 'pde'
                   ? 'bg-[#1a1c2e] text-indigo-400 border-indigo-500/40 font-semibold'
                   : 'bg-[#1e1e1e] border-transparent text-zinc-400 hover:text-zinc-200'
@@ -195,7 +194,7 @@ export default function DispatchChart({
           {rbResult && (
             <button
               onClick={() => setChartMode('rb')}
-              className={`px-2.5 py-1 rounded transition-all border cursor-pointer ${
+              className={`px-3 py-1 rounded-full transition-all border cursor-pointer ${
                 chartMode === 'rb'
                   ? 'bg-[#251829] text-purple-400 border-purple-500/40 font-semibold'
                   : 'bg-[#1e1e1e] border-transparent text-zinc-400 hover:text-zinc-200'
@@ -208,7 +207,7 @@ export default function DispatchChart({
           {rbResult && (
             <button
               onClick={() => setChartMode('compare')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all border cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all border cursor-pointer ${
                 chartMode === 'compare'
                   ? 'bg-[#242416] text-amber-300 border-amber-500/50 font-semibold'
                   : 'bg-[#1e1e1e] border-transparent text-zinc-400 hover:text-zinc-200'
@@ -225,7 +224,7 @@ export default function DispatchChart({
           <div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, solar: !s.solar }))}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs transition-all border cursor-pointer ${
                 activeSeries.solar
                   ? 'bg-[#221e14] border-amber-500/50 text-amber-400 font-medium'
                   : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
@@ -237,7 +236,7 @@ export default function DispatchChart({
 
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, load: !s.load }))}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs transition-all border cursor-pointer ${
                 activeSeries.load
                   ? 'bg-[#202020] border-zinc-500/50 text-zinc-200 font-medium'
                   : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
@@ -249,7 +248,7 @@ export default function DispatchChart({
 
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, battery: !s.battery }))}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs transition-all border cursor-pointer ${
                 activeSeries.battery
                   ? 'bg-[#132228] border-cyan-500/50 text-cyan-400 font-medium'
                   : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
@@ -261,7 +260,7 @@ export default function DispatchChart({
 
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, grid: !s.grid }))}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs transition-all border cursor-pointer ${
                 activeSeries.grid
                   ? 'bg-[#261c16] border-orange-500/50 text-orange-400 font-medium'
                   : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'
@@ -273,7 +272,7 @@ export default function DispatchChart({
 
             <button
               onClick={() => setActiveSeries((s) => ({ ...s, soc: !s.soc }))}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs transition-all border cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs transition-all border cursor-pointer ${
                 activeSeries.soc
                   ? 'bg-[#13241b] border-emerald-500/50 text-[#3ecf8e] font-medium'
                   : 'bg-[#1e1e1e] border-transparent text-zinc-500 hover:text-zinc-300'

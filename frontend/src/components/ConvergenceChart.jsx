@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { TrendingDown, Zap, DollarSign } from 'lucide-react';
+import { TrendingDown, Zap, DollarSign, Cpu } from 'lucide-react';
+import PillBadge from './PillBadge';
 
 // Monotone-preserving path to avoid wavy overshoot on convergence curves
 function getMonotonePath(points) {
@@ -120,10 +121,12 @@ export default function ConvergenceChart({ fdeResult, pdeResult, fdeCurve, pdeCu
                 : 'Differential Evolution Realized Energy Cost Convergence'}
             </h3>
             {delta !== null && delta > 0 && isPeak && (
-              <span className="flex items-center gap-1 text-[11px] font-mono font-bold bg-[#14231b] text-[#3ecf8e] border border-[#244b36] px-2 py-0.5 rounded">
-                <TrendingDown className="w-3 h-3" />
-                <span>-{delta.toFixed(1)} kW Shaved ({((delta / lastPde) * 100).toFixed(1)}%)</span>
-              </span>
+              <PillBadge
+                icon={TrendingDown}
+                label={`-${delta.toFixed(1)} kW Shaved (${((delta / lastPde) * 100).toFixed(1)}%)`}
+                variant="emerald"
+                size="sm"
+              />
             )}
           </div>
           <p className="text-xs text-zinc-300 mt-0.5">
@@ -134,38 +137,32 @@ export default function ConvergenceChart({ fdeResult, pdeResult, fdeCurve, pdeCu
         </div>
 
         {/* Metric Mode Switcher */}
-        <div className="flex items-center gap-1 font-mono text-xs">
-          <div className="flex items-center bg-[#202020] border border-[#333] rounded-md p-0.5 mr-2">
+        <div className="flex items-center gap-2 font-mono text-xs">
+          <div className="flex items-center bg-[#202020] border border-[#333] rounded-full p-0.5 mr-1">
             <button
               onClick={() => setMetricMode('peak')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                isPeak ? 'bg-[#14231b] text-[#3ecf8e] font-bold border border-[#244b36]' : 'text-zinc-400 hover:text-zinc-200'
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs transition-colors cursor-pointer ${
+                isPeak ? 'bg-emerald-950/60 text-emerald-300 font-semibold border border-emerald-500/50' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Zap className="w-3 h-3" />
+              <Zap className="w-3 h-3 text-emerald-400" />
               <span>Peak Grid (kW)</span>
             </button>
             <button
               onClick={() => setMetricMode('cost')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                !isPeak ? 'bg-[#202020] text-amber-300 font-bold border border-amber-500/40' : 'text-zinc-400 hover:text-zinc-200'
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs transition-colors cursor-pointer ${
+                !isPeak ? 'bg-amber-950/60 text-amber-300 font-semibold border border-amber-500/50' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <DollarSign className="w-3 h-3" />
+              <DollarSign className="w-3 h-3 text-amber-400" />
               <span>Cost ($)</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-[#3ecf8e]">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#3ecf8e]"></span>
-              <span className="font-medium">Fuzzy + DE (Proposed)</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <PillBadge icon={Zap} label="Fuzzy + DE (Proposed)" variant="emerald" size="sm" />
             {safePde.length > 0 && (
-              <div className="flex items-center gap-1.5 text-indigo-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
-                <span className="font-medium">Plain DE (Baseline)</span>
-              </div>
+              <PillBadge icon={Cpu} label="Plain DE (Baseline)" variant="blue" size="sm" />
             )}
           </div>
         </div>

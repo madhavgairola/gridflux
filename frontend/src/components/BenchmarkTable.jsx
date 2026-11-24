@@ -1,5 +1,6 @@
 import React from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Zap, Cpu, Layers } from 'lucide-react';
+import PillBadge from './PillBadge';
 
 export default function BenchmarkTable({ fdeResult, pdeResult, rbResult }) {
   if (!fdeResult) return null;
@@ -8,7 +9,8 @@ export default function BenchmarkTable({ fdeResult, pdeResult, rbResult }) {
     {
       name: 'Fuzzy + Differential Evolution',
       badge: 'Proposed (CO4 Hybrid)',
-      badgeColor: 'bg-[#14231b] text-[#3ecf8e] border border-[#244b36]',
+      variant: 'emerald',
+      icon: Zap,
       cost: fdeResult.total_cost_usd,
       peak: fdeResult.peak_grid_import_kw,
       wear: fdeResult.battery_cycle_cost_usd,
@@ -21,7 +23,8 @@ export default function BenchmarkTable({ fdeResult, pdeResult, rbResult }) {
     rows.push({
       name: 'Standard Differential Evolution',
       badge: 'Baseline A (Plain DE)',
-      badgeColor: 'bg-[#1a1c2e] text-indigo-400 border border-indigo-500/30',
+      variant: 'blue',
+      icon: Cpu,
       cost: pdeResult.total_cost_usd,
       peak: pdeResult.peak_grid_import_kw,
       wear: pdeResult.battery_cycle_cost_usd,
@@ -34,7 +37,8 @@ export default function BenchmarkTable({ fdeResult, pdeResult, rbResult }) {
     rows.push({
       name: 'Heuristic Greedy Schedule',
       badge: 'Baseline B (Rule-Based)',
-      badgeColor: 'bg-[#251829] text-purple-400 border border-purple-500/30',
+      variant: 'indigo',
+      icon: Layers,
       cost: rbResult.total_cost_usd,
       peak: rbResult.peak_grid_import_kw,
       wear: rbResult.battery_cycle_cost_usd,
@@ -53,19 +57,19 @@ export default function BenchmarkTable({ fdeResult, pdeResult, rbResult }) {
           Algorithm Benchmark Performance
         </h3>
         <span className="text-[11px] font-mono text-zinc-400">
-          Identical Scenario & Seed
+          Normalized across 24h simulation horizon
         </span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs font-mono border-collapse">
+        <table className="w-full text-left font-mono text-xs">
           <thead>
-            <tr className="border-b border-[#262626] bg-[#141414] text-[10px] text-zinc-400 uppercase tracking-wider">
-              <th className="py-2.5 px-3.5">Method</th>
-              <th className="py-2.5 px-3.5 text-right">Net Cost ($)</th>
-              <th className="py-2.5 px-3.5 text-right">Peak Import</th>
-              <th className="py-2.5 px-3.5 text-right">Battery Wear</th>
-              <th className="py-2.5 px-3.5 text-right">Solar Util</th>
+            <tr className="border-b border-[#242424] text-[11px] text-zinc-400 uppercase bg-[#141414]">
+              <th className="py-2.5 px-3.5 font-medium">Optimization Algorithm</th>
+              <th className="py-2.5 px-3.5 text-right font-medium">24h Net Cost</th>
+              <th className="py-2.5 px-3.5 text-right font-medium">Peak Grid Draw</th>
+              <th className="py-2.5 px-3.5 text-right font-medium">Battery Wear</th>
+              <th className="py-2.5 px-3.5 text-right font-medium">Solar Self-Use</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#242424]">
@@ -85,9 +89,9 @@ export default function BenchmarkTable({ fdeResult, pdeResult, rbResult }) {
                       {row.isWinner && <CheckCircle2 className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0" />}
                       <span>{row.name}</span>
                     </div>
-                    <span className={`inline-block mt-0.5 text-[9px] px-1.5 py-0.2 rounded font-mono ${row.badgeColor}`}>
-                      {row.badge}
-                    </span>
+                    <div className="mt-1">
+                      <PillBadge icon={row.icon} label={row.badge} variant={row.variant} size="sm" />
+                    </div>
                   </td>
                   <td className={`py-2.5 px-3.5 text-right tabular-nums ${isCostBest ? 'text-[#3ecf8e] font-semibold' : 'text-zinc-300'}`}>
                     ${row.cost.toFixed(2)}

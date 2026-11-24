@@ -7,7 +7,8 @@ import ConvergenceChart from './components/ConvergenceChart';
 import FuzzyInspector from './components/FuzzyInspector';
 import BenchmarkTable from './components/BenchmarkTable';
 import ErrorBoundary from './components/ErrorBoundary';
-import { Play, BarChart3, Cpu, AlertCircle } from 'lucide-react';
+import PillBadge from './components/PillBadge';
+import { Play, BarChart3, Cpu, AlertCircle, Activity } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('simulator'); // 'simulator' | 'analytics' | 'engine'
@@ -131,9 +132,7 @@ export default function App() {
         >
           <Play className="w-3.5 h-3.5 fill-current" />
           <span>Interactive 24h Simulator</span>
-          <span className="text-[10px] font-mono bg-[#14231b] text-[#3ecf8e] border border-[#244b36] px-1.5 py-0.2 rounded ml-1">
-            Live Flow
-          </span>
+          <PillBadge icon={Activity} label="Live Flow" variant="emerald" size="sm" className="ml-1" />
         </button>
 
         <button

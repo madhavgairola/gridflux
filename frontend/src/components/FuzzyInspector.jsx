@@ -84,9 +84,9 @@ export default function FuzzyInspector({
             Fuzzy Inference Inspector
           </h3>
         </div>
-        <div className="flex items-center gap-2 font-mono text-xs">
+        <div className="flex items-center gap-1.5 font-mono text-xs">
           <Clock className="w-3.5 h-3.5 text-[#3ecf8e]" />
-          <span className="font-semibold text-zinc-200 bg-[#202020] border border-[#2f2f2f] px-2 py-0.5 rounded">
+          <span className="font-semibold text-zinc-200 bg-[#202020] border border-[#2f2f2f] px-2.5 py-0.5 rounded-full text-xs">
             {hourLabel}
           </span>
         </div>
@@ -214,7 +214,7 @@ export default function FuzzyInspector({
                   <div className="flex-1 text-zinc-300 leading-tight">
                     {rule.description || `Rule ${idx + 1}`}
                   </div>
-                  <span className="font-bold text-[#3ecf8e] bg-[#14231b] border border-[#244b36] px-1.5 py-0.2 rounded text-[10px] tabular-nums shrink-0">
+                  <span className="font-mono text-[10px] font-bold text-emerald-300 bg-emerald-950/50 border border-emerald-500/40 px-2 py-0.5 rounded-full tabular-nums shrink-0">
                     w = {(typeof rule.strength === 'number' ? rule.strength : 0).toFixed(3)}
                   </span>
                 </div>
