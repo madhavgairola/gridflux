@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ControlBar from './components/ControlBar';
 import KpiStrip from './components/KpiStrip';
+import LiveSimulator from './components/LiveSimulator';
 import DispatchChart from './components/DispatchChart';
 import ConvergenceChart from './components/ConvergenceChart';
 import FuzzyInspector from './components/FuzzyInspector';
@@ -124,13 +125,24 @@ export default function App() {
       <KpiStrip fdeResult={fde} pdeResult={pde} rbResult={rb} />
 
       {/* Main Analytical Content Workspace */}
-      <main className="flex-1 p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-supabase-grid">
-        {/* Left Column (8 cols): Primary Visualizations */}
-        <div className="lg:col-span-8 flex flex-col">
-          {fde ? (
-            <>
-              {/* Primary Dispatch Chart */}
-              <div className="flex-1">
+      <main className="flex-1 p-6 bg-supabase-grid">
+        {/* 1. Live Interactive Microgrid Simulator & Flow Diagram */}
+        {fde && (
+          <LiveSimulator
+            fdeResult={fde}
+            rbResult={rb}
+            timeLabels={timeLabels}
+            currentHour={hoveredHourIdx}
+            onHourChange={setHoveredHourIdx}
+          />
+        )}
+
+        {/* 2. Analytical Charts & Fuzzy Inspector Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column (8 cols): Primary Visualizations */}
+          <div className="lg:col-span-8 flex flex-col">
+            {fde ? (
+              <>
                 <DispatchChart
                   timeLabels={timeLabels}
                   solarKw={fde.solar_kw}
@@ -141,56 +153,55 @@ export default function App() {
                   selectedHourIndex={hoveredHourIdx}
                   onHoverHour={setHoveredHourIdx}
                 />
-              </div>
 
-              {/* DE Convergence Curve */}
-              <ConvergenceChart
-                fdeCurve={fde.convergence_curve}
-                pdeCurve={pde ? pde.convergence_curve : null}
-              />
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[400px]">
-              <div className="text-center font-mono text-zinc-500 text-xs">
-                {loading ? 'Executing Differential Evolution optimization...' : 'No optimization data available.'}
+                <ConvergenceChart
+                  fdeCurve={fde.convergence_curve}
+                  pdeCurve={pde ? pde.convergence_curve : null}
+                />
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[400px]">
+                <div className="text-center font-mono text-zinc-500 text-xs">
+                  {loading ? 'Executing Differential Evolution optimization...' : 'No optimization data available.'}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Right Column (4 cols): Fuzzy Inspector & Benchmark Table */}
-        <div className="lg:col-span-4 flex flex-col">
-          {optimizationData ? (
-            <>
-              <FuzzyInspector
-                fuzzyExplainability={optimizationData.fuzzy_explainability}
-                selectedHourIndex={hoveredHourIdx}
-                timeLabels={timeLabels}
-              />
-              <BenchmarkTable
-                fdeResult={fde}
-                pdeResult={pde}
-                rbResult={rb}
-              />
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[300px]">
-              <div className="text-center font-mono text-zinc-500 text-xs">
-                Waiting for optimization results...
+          {/* Right Column (4 cols): Fuzzy Inspector & Benchmark Table */}
+          <div className="lg:col-span-4 flex flex-col">
+            {optimizationData ? (
+              <>
+                <FuzzyInspector
+                  fuzzyExplainability={optimizationData.fuzzy_explainability}
+                  selectedHourIndex={hoveredHourIdx}
+                  timeLabels={timeLabels}
+                />
+                <BenchmarkTable
+                  fdeResult={fde}
+                  pdeResult={pde}
+                  rbResult={rb}
+                />
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center bg-[#171717] border border-[#262626] rounded-lg min-h-[300px]">
+                <div className="text-center font-mono text-zinc-500 text-xs">
+                  Waiting for optimization results...
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </main>
 
       {/* Supabase-style Footer */}
       <footer className="border-t border-[#262626] bg-[#141414] px-6 py-2.5 text-[11px] font-mono text-zinc-500 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="text-zinc-300 font-medium">GridFlux v1.1.0</span>
+          <span className="text-zinc-300 font-medium">GridFlux v1.2.0</span>
           <span>•</span>
-          <span>Mamdani FIS + DE/best/1/bin</span>
+          <span>Mamdani FIS (27 Rules) + DE/best/1/bin</span>
           <span>•</span>
-          <span className="text-[#3ecf8e]">Inverter Ramp-Rate Smooth</span>
+          <span className="text-[#3ecf8e]">Interactive Simulator Active</span>
         </div>
         <div>
           Course 26B16CS311: Fundamentals of Soft Computing • CO4 System
